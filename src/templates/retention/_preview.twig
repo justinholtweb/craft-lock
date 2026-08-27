@@ -1,0 +1,36 @@
+{# What a rule would do right now. Note that a skipped row still appears, with its reason: "we
+   found 4,000 old submissions and touched none of them, because their owners have open requests"
+   is the useful answer, and an empty list says the opposite. #}
+<div class="lock-plan">
+    <table class="data fullwidth">
+        <tbody>
+            {% for target in plan.targets|slice(0, 200) %}
+                <tr>
+                    <td class="thin"><span class="lock-action lock-action-{{ target.action }}">{{ target.actionLabel() }}</span></td>
+                    <td>
+                        {{ target.label }}
+                        {% if target.reason %}<div class="lock-reason">{{ target.reason }}</div>{% endif %}
+                    </td>
+                </tr>
+            {% else %}
+                <tr><td class="light">{{ "Nothing is old enough yet."|t('lock') }}</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<p class="light" style="margin-top:8px;">
+    {{ "{erase} to delete, {anonymise} to anonymise, {skip} kept. Cutoff: {date}."|t('lock', {
+        erase: plan.countBy('erase'),
+        anonymise: plan.countBy('anonymise'),
+        skip: plan.countBy('skip'),
+        date: rule.cutoff()|date('short'),
+    }) }}
+    {% if plan.targets|length >= rule.limit %}
+        {{ "The rule’s limit of {n} was reached, so there is probably more behind it — it will keep going on later runs."|t('lock', {n: rule.limit}) }}
+    {% endif %}
+</p>
+
+{% for error in plan.errors %}
+    <div class="lock-flag lock-bad">{{ error }}</div>
+{% endfor %}

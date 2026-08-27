@@ -1,0 +1,15 @@
+{% extends "lock/_email/_shell" %}
+{% block body %}
+    <p><strong>{{ request.typeLabel() }}</strong> — {{ request.article() }}</p>
+
+    <table style="border-collapse:collapse;margin:16px 0;font-size:15px;">
+        <tr><td style="padding:4px 16px 4px 0;color:#69717a;">{{ "Reference"|t('lock') }}</td><td style="padding:4px 0;"><strong>{{ request.reference }}</strong></td></tr>
+        <tr><td style="padding:4px 16px 4px 0;color:#69717a;">{{ "From"|t('lock') }}</td><td style="padding:4px 0;">{{ request.email }}</td></tr>
+        <tr><td style="padding:4px 16px 4px 0;color:#69717a;">{{ "Due"|t('lock') }}</td><td style="padding:4px 0;">{{ request.dueAt ? request.dueAt|date('j F Y') : '' }}</td></tr>
+        <tr><td style="padding:4px 16px 4px 0;color:#69717a;">{{ "Verified"|t('lock') }}</td><td style="padding:4px 0;">{{ request.isVerified() ? "yes"|t('lock') : "not yet"|t('lock') }}</td></tr>
+    </table>
+
+    {% if request.message %}<blockquote style="border-left:3px solid #dfe3e8;margin:0;padding-left:14px;color:#3c434a;">{{ request.message|nl2br }}</blockquote>{% endif %}
+
+    <p style="margin-top:20px;"><a href="{{ url }}">{{ "Open it in the control panel"|t('lock') }}</a></p>
+{% endblock %}

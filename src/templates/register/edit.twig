@@ -1,0 +1,117 @@
+{% extends "_layouts/cp" %}
+{% import "_includes/forms" as forms %}
+
+{% set title = activity.id ? activity.name : "New register entry"|t('lock') %}
+{% set selectedSubnavItem = 'register' %}
+{% set crumbs = [{label: "Record of processing"|t('lock'), url: url('lock/register')}] %}
+
+{% block content %}
+    <form method="post" accept-charset="UTF-8" data-saveshortcut>
+        {{ csrfInput() }}{{ actionInput('lock/register/save') }}
+        {% if activity.id %}{{ hiddenInput('activityId', activity.id) }}{% endif %}
+
+        {{ forms.textField({
+            first: true,
+            label: "What the activity is"|t('lock'),
+            instructions: "Named for the purpose, not the system. “Fulfilling orders”, not “the orders table”."|t('lock'),
+            name: 'name',
+            value: activity.name,
+            required: true,
+            errors: activity.getErrors('name'),
+        }) }}
+
+        {{ forms.textareaField({
+            label: "Purpose"|t('lock'),
+            instructions: "Article 30(1)(b). Why the processing happens."|t('lock'),
+            name: 'purpose',
+            rows: 3,
+            value: activity.purpose,
+        }) }}
+
+        {{ forms.selectField({
+            label: "Lawful basis"|t('lock'),
+            instructions: "One of the six in Article 6. There is no seventh, and “we have always done it” is not among them."|t('lock'),
+            name: 'basis',
+            options: bases|keys|map(k => {label: bases[k], value: k}),
+            value: activity.basis,
+        }) }}
+
+        {{ forms.textareaField({
+            label: "Balancing test"|t('lock'),
+            instructions: "Needed when the basis is legitimate interests: the interest pursued, and why it is not overridden by the rights of the people concerned. An entry claiming legitimate interests with this empty is the commonest defect in a register."|t('lock'),
+            name: 'balancing',
+            rows: 3,
+            value: activity.balancing,
+        }) }}
+
+        {{ forms.textareaField({
+            label: "Categories of personal data"|t('lock'),
+            instructions: "One per line. Article 30(1)(c)."|t('lock'),
+            name: 'dataCategories',
+            rows: 3,
+            value: activity.dataCategories|join("\n"),
+        }) }}
+
+        {{ forms.textareaField({
+            label: "Categories of people"|t('lock'),
+            instructions: "One per line: customers, applicants, employees, subscribers."|t('lock'),
+            name: 'subjectCategories',
+            rows: 2,
+            value: activity.subjectCategories|join("\n"),
+        }) }}
+
+        {{ forms.textareaField({
+            label: "Who it is disclosed to"|t('lock'),
+            instructions: "One per line. Article 30(1)(d) — processors count: the host, the mail service, the payment gateway."|t('lock'),
+            name: 'recipients',
+            rows: 3,
+            value: activity.recipients|join("\n"),
+        }) }}
+
+        {{ forms.textField({
+            label: "Transfers outside the EEA"|t('lock'),
+            instructions: "Article 30(1)(e). Name the country and the safeguard relied on."|t('lock'),
+            name: 'transfers',
+            value: activity.transfers,
+        }) }}
+
+        {{ forms.textField({
+            label: "How long it is kept"|t('lock'),
+            instructions: "Article 30(1)(f). If a retention rule enforces this, say the same number here — a register that states one period while the site enforces another is the discrepancy an inspection finds."|t('lock'),
+            name: 'retention',
+            value: activity.retention,
+        }) }}
+
+        {{ forms.textareaField({
+            label: "Security measures"|t('lock'),
+            instructions: "Article 30(1)(g), in outline."|t('lock'),
+            name: 'safeguards',
+            rows: 2,
+            value: activity.safeguards,
+        }) }}
+
+        {{ forms.checkboxGroupField({
+            label: "Where it lives"|t('lock'),
+            instructions: "The sources Lock searches. Anything ticked here counts as accounted for when the register is checked against the site."|t('lock'),
+            name: 'systems',
+            options: sources|keys|map(k => {label: sources[k], value: k}),
+            values: activity.systems,
+        }) }}
+
+        {{ forms.textField({label: "Owner"|t('lock'), name: 'owner', value: activity.owner}) }}
+        {{ forms.textField({label: "Order"|t('lock'), name: 'sortOrder', type: 'number', size: 4, value: activity.sortOrder}) }}
+        {{ forms.lightswitchField({label: "Include in the register"|t('lock'), name: 'enabled', on: activity.enabled}) }}
+
+        <div class="buttons">
+            <button type="submit" class="btn submit">{{ "Save"|t('lock') }}</button>
+        </div>
+    </form>
+
+    {% if activity.id %}
+        <form method="post" style="margin-top:24px;">
+            {{ csrfInput() }}{{ actionInput('lock/register/delete') }}{{ redirectInput('lock/register') }}
+            {{ hiddenInput('activityId', activity.id) }}
+            <button type="submit" class="btn small">{{ "Remove from the register"|t('lock') }}</button>
+        </form>
+    {% endif %}
+{% endblock %}

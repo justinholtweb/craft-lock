@@ -1,0 +1,99 @@
+{% extends "_layouts/cp" %}
+{% import "_includes/forms" as forms %}
+
+{% set title = "Where to look"|t('lock') %}
+{% set selectedSubnavItem = 'settings' %}
+{% set tabs = {
+    general: {label: "General"|t('lock'), url: url('lock/settings')},
+    collectors: {label: "Where to look"|t('lock'), url: url('lock/settings/collectors')},
+    retention: {label: "Retention rules"|t('lock'), url: url('lock/settings/retention')},
+} %}
+{% set selectedTab = 'collectors' %}
+
+{% block content %}
+    {% include "lock/_partials/style" %}
+
+    <p class="light">
+        {{ "A disclosure is only as complete as the list of places it looked. Switching a source off makes every future disclosure say so out loud — “not searched, because it is switched off” — rather than quietly returning less."|t('lock') }}
+    </p>
+
+    <form method="post" accept-charset="UTF-8" data-saveshortcut>
+        {{ csrfInput() }}{{ actionInput('lock/settings/save') }}{{ redirectInput('lock/settings/collectors') }}
+
+        <table class="data fullwidth" style="margin-bottom:24px;">
+            <thead><tr><th>{{ "Source"|t('lock') }}</th><th>{{ "What it searches"|t('lock') }}</th><th class="thin">{{ "Now"|t('lock') }}</th></tr></thead>
+            <tbody>
+                {% for handle, collector in collectors %}
+                    {% set skipped = handle in settings.disabledCollectors %}
+                    <tr>
+                        <td>
+                            <strong>{{ collector.label }}</strong>
+                            <div class="light"><code>{{ handle }}</code></div>
+                            {% if collector.scopes|length %}
+                                <div class="light">{{ "Offers {n} retention scope(s)."|t('lock', {n: collector.scopes|length}) }}</div>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {{ collector.description }}
+                            {% if not collector.available %}
+                                <div class="lock-reason">{{ collector.reason }}</div>
+                            {% endif %}
+                        </td>
+                        <td class="thin">
+                            {%- if skipped -%}
+                                <span class="lock-action lock-action-skip">{{ "skipped"|t('lock') }}</span>
+                            {%- elseif not collector.available -%}
+                                <span class="lock-action lock-action-skip">{{ "absent"|t('lock') }}</span>
+                            {%- else -%}
+                                <span class="lock-action lock-action-anonymise">{{ "searched"|t('lock') }}</span>
+                            {%- endif -%}
+                        </td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+
+        {{ forms.checkboxGroupField({
+            label: "Sources to skip"|t('lock'),
+            instructions: "Anything not ticked is searched. Stated this way round on purpose: a source added by a plugin update is searched by default, which is the safe direction for a list whose whole job is completeness."|t('lock'),
+            name: 'settings[disabledCollectors]',
+            options: collectors|keys|map(h => {label: collectors[h].label, value: h}),
+            values: settings.disabledCollectors,
+        }) }}
+
+        <hr>
+
+        {{ forms.lightswitchField({
+            label: "Search log files"|t('lock'),
+            instructions: "Logs are disclosed and never rewritten — a log file is only useful because it has not been edited. Use a retention rule on whole log files instead."|t('lock'),
+            name: 'settings[scanLogs]',
+            on: settings.scanLogs,
+        }) }}
+
+        {{ forms.editableTableField({
+            label: "Other tables"|t('lock'),
+            instructions: "Modules, old imports, anything Lock has never heard of. Table and column names are checked as plain identifiers both when saved and again when used."|t('lock'),
+            name: 'settings[customTables]',
+            id: 'customTables',
+            cols: {
+                table: {heading: "Table"|t('lock'), type: 'singleline', width: '20%'},
+                label: {heading: "Called"|t('lock'), type: 'singleline'},
+                emailColumn: {heading: "Email column"|t('lock'), type: 'singleline'},
+                userColumn: {heading: "User ID column"|t('lock'), type: 'singleline'},
+                dateColumn: {heading: "Date column"|t('lock'), type: 'singleline'},
+                mode: {heading: "May Lock"|t('lock'), type: 'select', options: {
+                    read: "Only read"|t('lock'),
+                    anonymise: "Anonymise"|t('lock'),
+                    erase: "Delete"|t('lock'),
+                }},
+            },
+            rows: settings.customTables,
+            addRowLabel: "Add a table"|t('lock'),
+            errors: settings.getErrors('customTables'),
+        }) }}
+
+        <div class="buttons">
+            <button type="submit" class="btn submit">{{ "Save"|t('lock') }}</button>
+        </div>
+    </form>
+{% endblock %}

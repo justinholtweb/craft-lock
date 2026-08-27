@@ -1,0 +1,22 @@
+{% extends "lock/_portal/_shell" %}
+{% set pageTitle = ok ? "Confirmed"|t('lock') : "That link has expired"|t('lock') %}
+
+{% block body %}
+    <h1>{{ pageTitle }}</h1>
+
+    <div class="panel{{ ok ? '' : ' bad' }}">{{ message }}</div>
+
+    {% if ok and request is defined and request %}
+        <dl>
+            <dt>{{ "Your reference"|t('lock') }}</dt><dd><strong>{{ request.reference }}</strong></dd>
+            <dt>{{ "What you asked for"|t('lock') }}</dt><dd>{{ request.typeLabel() }}</dd>
+            <dt>{{ "You will hear by"|t('lock') }}</dt><dd>{{ request.dueAt ? request.dueAt|date('j F Y') : '' }}</dd>
+        </dl>
+
+        <p class="muted">
+            {{ "Keep the reference — you can use it, with the same email address, to check on this request at any time."|t('lock') }}
+        </p>
+
+        <p><a href="{{ craft.lock.statusUrl() }}">{{ "Check on it"|t('lock') }}</a></p>
+    {% endif %}
+{% endblock %}

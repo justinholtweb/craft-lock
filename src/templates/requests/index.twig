@@ -1,0 +1,67 @@
+{% extends "_layouts/cp" %}
+{% import "_includes/forms" as forms %}
+
+{% set title = "Requests"|t('lock') %}
+{% set selectedSubnavItem = 'requests' %}
+
+{% block actionButton %}
+    <a class="btn submit add icon" href="{{ url('lock/requests/new') }}">{{ "Record a request"|t('lock') }}</a>
+{% endblock %}
+
+{% block content %}
+    {% include "lock/_partials/style" %}
+
+    <form method="get" action="{{ url('lock/requests') }}" class="flex" style="margin-bottom:18px;">
+        <div class="flex-grow">
+            <input type="text" class="text fullwidth" name="search" value="{{ search }}" placeholder="{{ 'Reference, name or address'|t('lock') }}">
+        </div>
+        <div>
+            {{ forms.select({
+                name: 'status',
+                value: status,
+                options: [{label: "Open"|t('lock'), value: 'open'}, {label: "All"|t('lock'), value: 'all'}]|merge(
+                    statuses|keys|map(k => {label: statuses[k], value: k})
+                )
+            }) }}
+        </div>
+        <div><button type="submit" class="btn">{{ "Filter"|t('lock') }}</button></div>
+    </form>
+
+    <table class="data fullwidth">
+        <thead>
+            <tr>
+                <th>{{ "Reference"|t('lock') }}</th>
+                <th>{{ "Kind"|t('lock') }}</th>
+                <th>{{ "Subject"|t('lock') }}</th>
+                <th>{{ "Received"|t('lock') }}</th>
+                <th>{{ "Status"|t('lock') }}</th>
+                <th>{{ "Due"|t('lock') }}</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for request in requests %}
+                {% set days = request.daysRemaining() %}
+                <tr>
+                    <td><a href="{{ url('lock/requests/' ~ request.id) }}"><code>{{ request.reference }}</code></a></td>
+                    <td>{{ request.type }}<br><span class="light">{{ request.article() }}</span></td>
+                    <td>{{ request.email }}{% if request.name %}<br><span class="light">{{ request.name }}</span>{% endif %}</td>
+                    <td>{{ request.receivedAt ? request.receivedAt|date('short') : '' }}</td>
+                    <td>{{ request.statusLabel() }}</td>
+                    <td class="lock-due lock-{{ request.urgency() }}">
+                        {%- if request.isClosed() -%}
+                            <span class="light">{{ "closed"|t('lock') }}</span>
+                        {%- elseif days is null -%}
+                            —
+                        {%- elseif days < 0 -%}
+                            {{ "{n} days late"|t('lock', {n: days|abs}) }}
+                        {%- else -%}
+                            {{ "{n} days"|t('lock', {n: days}) }}
+                        {%- endif -%}
+                    </td>
+                </tr>
+            {% else %}
+                <tr><td colspan="6" class="light">{{ "No requests match."|t('lock') }}</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+{% endblock %}

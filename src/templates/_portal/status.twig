@@ -1,0 +1,41 @@
+{% extends "lock/_portal/_shell" %}
+{% set pageTitle = "Check on a request"|t('lock') %}
+
+{% block body %}
+    <h1>{{ pageTitle }}</h1>
+
+    <form method="get" action="">
+        <label for="reference">{{ "Reference"|t('lock') }}</label>
+        <input type="text" id="reference" name="reference" value="{{ reference }}" placeholder="DSAR-{{ now|date('Y') }}-0001" required>
+
+        <label for="email">{{ "The email address you used"|t('lock') }}</label>
+        <input type="email" id="email" name="email" value="{{ email }}" required>
+
+        <button type="submit">{{ "Look it up"|t('lock') }}</button>
+    </form>
+
+    {% if searched %}
+        {% if request %}
+            <div class="panel">
+                <dl>
+                    <dt>{{ "Reference"|t('lock') }}</dt><dd><strong>{{ request.reference }}</strong></dd>
+                    <dt>{{ "What you asked for"|t('lock') }}</dt><dd>{{ request.typeLabel() }}</dd>
+                    <dt>{{ "Received"|t('lock') }}</dt><dd>{{ request.receivedAt|date('j F Y') }}</dd>
+                    <dt>{{ "Status"|t('lock') }}</dt><dd>{{ request.statusLabel() }}</dd>
+                    {% if request.isOpen() %}
+                        <dt>{{ "Due by"|t('lock') }}</dt><dd>{{ request.dueAt ? request.dueAt|date('j F Y') : '' }}</dd>
+                    {% elseif request.outcome %}
+                        <dt>{{ "Outcome"|t('lock') }}</dt><dd>{{ request.outcome }}</dd>
+                    {% endif %}
+                </dl>
+            </div>
+        {% else %}
+            {# Deliberately the same wording whether the reference is wrong, the address is wrong,
+               or there is no such request. Any of those distinctions would let somebody with a
+               guessable reference confirm whose address it belongs to. #}
+            <div class="panel bad">
+                {{ "We could not match that reference and address. Check both, or write to us and we will find it."|t('lock') }}
+            </div>
+        {% endif %}
+    {% endif %}
+{% endblock %}

@@ -1,0 +1,15 @@
+{% extends "lock/_email/_shell" %}
+{% block body %}
+    <p>{{ "Retention rules ran."|t('lock') }}</p>
+
+    <table style="border-collapse:collapse;margin:16px 0;font-size:15px;">
+        {% for key, outcome in outcomes %}
+            <tr>
+                <td style="padding:5px 16px 5px 0;"><code>{{ key }}</code>{% if outcome.dryRun %} <span style="color:#69717a;">({{ "reported only"|t('lock') }})</span>{% endif %}</td>
+                <td style="padding:5px 0;{{ outcome.isClean() ? '' : 'color:#b3261e;' }}">{{ outcome.summary() }}</td>
+            </tr>
+        {% endfor %}
+    </table>
+
+    <p><a href="{{ url }}">{{ "The run history"|t('lock') }}</a></p>
+{% endblock %}

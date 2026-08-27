@@ -1,0 +1,76 @@
+{
+    "name": "justinholtweb/craft-lock",
+    "description": "GDPR and DSAR governance for Craft CMS — subject access request intake, everything you hold on a person assembled across users, entries, orders, submissions, comments and logs, anonymise or erase, a consent and processing-activity ledger, and retention rules that purge on their own.",
+    "type": "craft-plugin",
+    "version": "5.0.0",
+    "keywords": [
+        "craft",
+        "cms",
+        "craftcms",
+        "craft-plugin",
+        "lock",
+        "gdpr",
+        "dsar",
+        "privacy",
+        "compliance",
+        "data protection",
+        "right to erasure",
+        "anonymise",
+        "consent",
+        "retention",
+        "ccpa"
+    ],
+    "license": "proprietary",
+    "minimum-stability": "dev",
+    "prefer-stable": true,
+    "authors": [
+        {
+            "name": "Justin Holt",
+            "homepage": "https://justinholt.com"
+        }
+    ],
+    "support": {
+        "docs": "https://craft-lock.com/docs",
+        "source": "https://github.com/justinholtweb/craft-lock",
+        "issues": "https://github.com/justinholtweb/craft-lock/issues"
+    },
+    "require": {
+        "php": "^8.2",
+        "ext-json": "*",
+        "craftcms/cms": "^5.3.0"
+    },
+    "require-dev": {
+        "craftcms/ecs": "dev-main",
+        "craftcms/phpstan": "dev-main",
+        "phpunit/phpunit": "^10.5"
+    },
+    "autoload": {
+        "psr-4": {
+            "justinholtweb\\lock\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "justinholtweb\\lock\\tests\\": "tests/"
+        }
+    },
+    "scripts": {
+        "test": "phpunit"
+    },
+    "config": {
+        "allow-plugins": {
+            "yiisoft/yii2-composer": true,
+            "craftcms/plugin-installer": true,
+            "craftcms/generator": true
+        }
+    },
+    "extra": {
+        "name": "Lock",
+        "handle": "lock",
+        "developer": "Justin Holt",
+        "developerUrl": "https://justinholt.com",
+        "documentationUrl": "https://craft-lock.com/docs",
+        "changelogUrl": "https://raw.githubusercontent.com/justinholtweb/craft-lock/main/CHANGELOG.md",
+        "class": "justinholtweb\\lock\\Plugin"
+    }
+}

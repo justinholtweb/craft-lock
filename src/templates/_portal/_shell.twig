@@ -1,0 +1,44 @@
+{# The plugin's own portal pages: plain, unbranded and self-contained.
+
+   They are deliberately not pretty. What matters is that the link in a verification email never
+   404s on a fresh install, before anybody has written a template — so these have no dependency on
+   the site's layouts, no assets, and no assumptions about what a `_layout` provides. A site that
+   wants its own look puts a `lock/verify.twig` in its templates folder and this is never used. #}
+<!doctype html>
+<html lang="{{ craft.app.language|split('-')|first }}">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="robots" content="noindex, nofollow">
+    <title>{{ pageTitle ?? "Your data"|t('lock') }} — {{ craft.app.systemName }}</title>
+    <style>
+        :root { color-scheme: light dark; }
+        body { font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+               max-width: 34rem; margin: 12vh auto; padding: 0 1.25rem; color: #1c2024; background: #fff; }
+        h1 { font-size: 1.5rem; margin-bottom: .5rem; }
+        .muted { color: #69717a; font-size: .94rem; }
+        .panel { border: 1px solid #dfe3e8; border-left: 3px solid #c9a227; border-radius: 0 6px 6px 0; padding: 1rem 1.2rem; margin: 1.5rem 0; }
+        .panel.bad { border-left-color: #b3261e; }
+        label { display: block; font-weight: 600; margin: 1rem 0 .25rem; font-size: .92rem; }
+        input[type=text], input[type=email] { width: 100%; padding: .55rem .7rem; font-size: 1rem;
+               border: 1px solid #c4cad0; border-radius: 5px; background: #fff; color: inherit; }
+        button { margin-top: 1.2rem; padding: .6rem 1.1rem; font-size: 1rem; border: 0; border-radius: 5px;
+               background: #2a2f36; color: #fff; cursor: pointer; }
+        dl { display: grid; grid-template-columns: 10rem 1fr; gap: .3rem 1rem; margin: 0; }
+        dt { font-weight: 600; }
+        dd { margin: 0; }
+        @media (prefers-color-scheme: dark) {
+            body { background: #16181a; color: #e6e8ea; }
+            .panel { border-color: #2a2f36; }
+            input[type=text], input[type=email] { background: #1f2225; border-color: #343a41; }
+            button { background: #c9a227; color: #16181a; }
+        }
+    </style>
+</head>
+<body>
+{% block body %}{% endblock %}
+<p class="muted" style="margin-top:3rem;">
+    {{ craft.app.systemName }}{% if craft.lock.contactEmail() %} — <a href="mailto:{{ craft.lock.contactEmail() }}">{{ craft.lock.contactEmail() }}</a>{% endif %}
+</p>
+</body>
+</html>

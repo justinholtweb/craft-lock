@@ -1,0 +1,60 @@
+{% extends "_layouts/cp" %}
+{% import "_includes/forms" as forms %}
+
+{% set title = "Record a request"|t('lock') %}
+{% set selectedSubnavItem = 'requests' %}
+{% set crumbs = [{label: "Requests"|t('lock'), url: url('lock/requests')}] %}
+
+{% block content %}
+    <form method="post" accept-charset="UTF-8" data-saveshortcut>
+        {{ csrfInput() }}
+        {{ actionInput('lock/requests/save') }}
+
+        <p class="light">
+            {{ "For a request that arrived by post, by phone or by email. It is treated as already verified — you have satisfied yourself who asked — so the clock starts now."|t('lock') }}
+        </p>
+
+        {{ forms.textField({
+            first: true,
+            label: "Email address"|t('lock'),
+            instructions: "Everything is matched on this. Guest orders and form submissions are found by address, not by account."|t('lock'),
+            id: 'email',
+            name: 'email',
+            type: 'email',
+            required: true,
+            value: request.email,
+            errors: request.getErrors('email'),
+        }) }}
+
+        {{ forms.textField({label: "Name"|t('lock'), id: 'name', name: 'name', value: request.name}) }}
+
+        {{ forms.selectField({
+            label: "What they asked for"|t('lock'),
+            id: 'type',
+            name: 'type',
+            options: types|keys|map(k => {label: types[k], value: k}),
+            value: request.type,
+        }) }}
+
+        {{ forms.textareaField({
+            label: "What they said"|t('lock'),
+            instructions: "In their words, as far as possible. It is what the request is judged against later."|t('lock'),
+            id: 'message',
+            name: 'message',
+            rows: 4,
+            value: request.message,
+        }) }}
+
+        {{ forms.lightswitchField({
+            label: "Email an acknowledgement"|t('lock'),
+            instructions: "Sends the subject the reference and the date they will hear back by."|t('lock'),
+            id: 'notify',
+            name: 'notify',
+            on: true,
+        }) }}
+
+        <div class="buttons">
+            <button type="submit" class="btn submit">{{ "Record it"|t('lock') }}</button>
+        </div>
+    </form>
+{% endblock %}

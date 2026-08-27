@@ -1,0 +1,16 @@
+/vendor
+/composer.lock
+
+# Internal build roadmap. Kept locally, not shipped.
+/docs/plan.md
+.DS_Store
+.phpunit.result.cache
+/.phpunit.cache
+/.idea
+/.vscode
+
+# The plugin has its own DDEV project for the test suite. Its config is source; the images,
+# snapshots and generated compose files it writes alongside are not.
+/.ddev/db_snapshots
+/.ddev/.ddev-docker-*
+/.ddev/*.yaml.bak

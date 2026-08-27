@@ -1,0 +1,12 @@
+{# Table-free, inline-styled, single column. Email clients are what they are, and a legal notice
+   that renders as a wall of unstyled text in Outlook is still a legal notice — so nothing here
+   depends on CSS surviving. #}
+<div style="font:15px/1.6 -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#1c2024;max-width:34rem;">
+    {% block body %}{% endblock %}
+    <hr style="border:0;border-top:1px solid #dfe3e8;margin:28px 0 14px;">
+    <p style="font-size:13px;color:#69717a;">
+        {{ settings.organisationName ?: craft.app.systemName }}
+        {%- if settings.resolvedContactEmail() %} — <a href="mailto:{{ settings.resolvedContactEmail() }}" style="color:#69717a;">{{ settings.resolvedContactEmail() }}</a>{% endif %}
+        {%- if settings.policyUrl %}<br><a href="{{ settings.policyUrl }}" style="color:#69717a;">{{ "Our privacy policy"|t('lock') }}</a>{% endif %}
+    </p>
+</div>

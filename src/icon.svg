@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 193 193" width="193" height="193" role="img" aria-label="Lock">
+    <title>Lock</title>
+    <!--
+        A brass padlock on a gunmetal plate. The keyhole is a person, not a keyhole: the shackle
+        and body say "locked" on their own, and what this plugin actually protects is somebody,
+        which is the distinction it exists to make.
+    -->
+    <defs>
+        <linearGradient id="lock-brass" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stop-color="#E4C271"/>
+            <stop offset="0.55" stop-color="#C9A227"/>
+            <stop offset="1" stop-color="#9E7C18"/>
+        </linearGradient>
+        <linearGradient id="lock-plate" x1="0" y1="0" x2="0.35" y2="1">
+            <stop offset="0" stop-color="#333A43"/>
+            <stop offset="1" stop-color="#22262C"/>
+        </linearGradient>
+    </defs>
+
+    <rect width="193" height="193" rx="35" fill="url(#lock-plate)"/>
+
+    <!-- Shackle. Drawn as a stroked arc with square-ish ends so it seats into the body. -->
+    <path d="M69 88 V71 a27.5 27.5 0 0 1 55 0 V88"
+          fill="none" stroke="url(#lock-brass)" stroke-width="15" stroke-linecap="butt"/>
+
+    <!-- Body. -->
+    <rect x="47" y="86" width="99" height="76" rx="13" fill="url(#lock-brass)"/>
+
+    <!-- The person in the keyhole, cut out of the body. -->
+    <g fill="#22262C">
+        <circle cx="96.5" cy="112" r="11"/>
+        <path d="M96.5 128 c-13 0-21 8.5-22.5 20.5 a2.5 2.5 0 0 0 2.5 2.8 h40 a2.5 2.5 0 0 0 2.5-2.8 C117.5 136.5 109.5 128 96.5 128 Z"/>
+    </g>
+</svg>

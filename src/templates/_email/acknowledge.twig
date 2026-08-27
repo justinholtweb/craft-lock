@@ -1,0 +1,15 @@
+{% extends "lock/_email/_shell" %}
+{% block body %}
+    <p>{{ "Thank you — we have your request and we are working on it."|t('lock') }}</p>
+
+    <table style="border-collapse:collapse;margin:20px 0;font-size:15px;">
+        <tr><td style="padding:4px 16px 4px 0;color:#69717a;">{{ "Reference"|t('lock') }}</td><td style="padding:4px 0;"><strong>{{ request.reference }}</strong></td></tr>
+        <tr><td style="padding:4px 16px 4px 0;color:#69717a;">{{ "What you asked for"|t('lock') }}</td><td style="padding:4px 0;">{{ request.typeLabel() }}</td></tr>
+        <tr><td style="padding:4px 16px 4px 0;color:#69717a;">{{ "We will answer by"|t('lock') }}</td><td style="padding:4px 0;">{{ request.dueAt ? request.dueAt|date('j F Y') : '' }}</td></tr>
+    </table>
+
+    <p>{{ "The law gives us one month. If your request turns out to be complicated we may need up to two months more — if that happens we will write and tell you why, within the first month."|t('lock') }}</p>
+
+    <p>{{ "You can check on it at any time with your reference and this email address:"|t('lock') }}<br>
+        <a href="{{ siteUrl('lock/status') }}">{{ siteUrl('lock/status') }}</a></p>
+{% endblock %}

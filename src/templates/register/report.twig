@@ -1,0 +1,79 @@
+{% extends "_layouts/cp" %}
+
+{% set title = "Record of processing activities"|t('lock') %}
+{% set selectedSubnavItem = 'register' %}
+{% set crumbs = [{label: "Record of processing"|t('lock'), url: url('lock/register')}] %}
+
+{% block actionButton %}
+    <div class="btngroup">
+        <a class="btn" href="{{ url('lock/register/report', {format: 'json'}) }}">{{ "JSON"|t('lock') }}</a>
+        <button type="button" class="btn submit" onclick="window.print()">{{ "Print"|t('lock') }}</button>
+    </div>
+{% endblock %}
+
+{% block content %}
+    {# Styled for paper as well as for the screen. A supervisory authority asking for an Article 30
+       record wants a document, and the document has to survive being printed to PDF and emailed. #}
+    <style>
+        .lock-report h2 { border-bottom: 2px solid #333; padding-bottom: 4px; margin-top: 32px; }
+        .lock-report table { width: 100%; border-collapse: collapse; margin-bottom: 22px; }
+        .lock-report th { text-align: left; width: 14rem; vertical-align: top; padding: 5px 10px 5px 0; }
+        .lock-report td { padding: 5px 0; vertical-align: top; }
+        .lock-report tr { border-bottom: 1px solid #e5e7eb; }
+        @media print {
+            #global-header, #global-sidebar, #page-title .btngroup, .lock-noprint { display: none !important; }
+            #main-content, #content { margin: 0 !important; padding: 0 !important; }
+            .lock-report { font-size: 11pt; }
+            .lock-report h2 { page-break-after: avoid; }
+            .lock-report table { page-break-inside: avoid; }
+        }
+    </style>
+
+    <div class="lock-report">
+        <p>
+            <strong>{{ report.controller.name }}</strong><br>
+            {{ report.controller.contact }}{% if report.controller.email %} — {{ report.controller.email }}{% endif %}<br>
+            <span class="light">{{ "Generated {date}"|t('lock', {date: now|datetime('short')}) }}</span>
+        </p>
+
+        {% for activity in report.activities %}
+            <h2>{{ activity.name }}</h2>
+            <table>
+                <tr><th>{{ "Purpose"|t('lock') }}</th><td>{{ activity.purpose }}</td></tr>
+                <tr><th>{{ "Lawful basis"|t('lock') }}</th><td>{{ activity.lawful_basis }}</td></tr>
+                {% if activity.balancing_test %}<tr><th>{{ "Balancing test"|t('lock') }}</th><td>{{ activity.balancing_test }}</td></tr>{% endif %}
+                <tr><th>{{ "Categories of data"|t('lock') }}</th><td>{{ activity.data_categories|join(', ') ?: '—' }}</td></tr>
+                <tr><th>{{ "Categories of people"|t('lock') }}</th><td>{{ activity.subject_categories|join(', ') ?: '—' }}</td></tr>
+                <tr><th>{{ "Recipients"|t('lock') }}</th><td>{{ activity.recipients|join(', ') ?: '—' }}</td></tr>
+                <tr><th>{{ "Transfers"|t('lock') }}</th><td>{{ activity.transfers ?: "None"|t('lock') }}</td></tr>
+                <tr><th>{{ "Retention"|t('lock') }}</th><td>{{ activity.retention }}</td></tr>
+                <tr><th>{{ "Security"|t('lock') }}</th><td>{{ activity.security ?: '—' }}</td></tr>
+                <tr><th>{{ "Systems"|t('lock') }}</th><td>{{ activity.systems|join(', ') ?: '—' }}</td></tr>
+                <tr><th>{{ "Last reviewed"|t('lock') }}</th><td>{{ activity.last_reviewed ?: "never"|t('lock') }}</td></tr>
+            </table>
+        {% endfor %}
+
+        {% if report.retention_rules|length %}
+            <h2>{{ "Retention rules actually enforced"|t('lock') }}</h2>
+            <table>
+                <tr style="border-bottom:2px solid #333;">
+                    <th>{{ "Rule"|t('lock') }}</th><td><strong>{{ "Period"|t('lock') }} · {{ "Treatment"|t('lock') }} · {{ "Enforced"|t('lock') }}</strong></td>
+                </tr>
+                {% for rule in report.retention_rules %}
+                    <tr>
+                        <th>{{ rule.rule }}</th>
+                        <td>
+                            {{ rule.period }} · {{ rule.treatment }} · {{ rule.enforced ? "yes"|t('lock') : "no — written but switched off"|t('lock') }}
+                            {% if rule.justification %}<br><span class="light">{{ rule.justification }}</span>{% endif %}
+                        </td>
+                    </tr>
+                {% endfor %}
+            </table>
+        {% endif %}
+
+        {% if report.gaps|length %}
+            <h2 class="lock-noprint">{{ "Known gaps"|t('lock') }}</h2>
+            <ul class="lock-noprint">{% for gap in report.gaps %}<li>{{ gap }}</li>{% endfor %}</ul>
+        {% endif %}
+    </div>
+{% endblock %}

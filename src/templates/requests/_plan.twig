@@ -1,0 +1,38 @@
+{# The preview. Rendered into the erasure panel by an AJAX call, and re-rendered whenever the mode
+   changes — because the same records get different treatment under "anonymise" and "erase", and
+   showing yesterday's plan next to today's button is how the wrong thing gets approved. #}
+<div class="lock-plan">
+    <table class="data fullwidth">
+        <thead>
+            <tr>
+                <th>{{ "What happens"|t('lock') }}</th>
+                <th>{{ "Source"|t('lock') }}</th>
+                <th>{{ "Record"|t('lock') }}</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for target in plan.targets %}
+                <tr>
+                    <td class="thin"><span class="lock-action lock-action-{{ target.action }}">{{ target.actionLabel() }}</span></td>
+                    <td class="thin">{{ target.sourceLabel }}</td>
+                    <td>
+                        {{ target.label }}
+                        {% if target.reason %}<div class="lock-reason">{{ target.reason }}</div>{% endif %}
+                        {% if target.action == 'anonymise' and target.fields|length %}
+                            <div class="lock-reason">{{ "Overwrites:"|t('lock') }} {{ target.fields|join(', ') }}</div>
+                        {% endif %}
+                    </td>
+                </tr>
+            {% else %}
+                <tr><td colspan="3" class="light">{{ "Nothing found for this address."|t('lock') }}</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+{% if plan.errors|length %}
+    <div class="lock-flag lock-bad" style="margin-top:14px;">
+        <strong>{{ "Some sources could not be read, so this plan is incomplete."|t('lock') }}</strong>
+        <ul>{% for error in plan.errors %}<li>{{ error }}</li>{% endfor %}</ul>
+    </div>
+{% endif %}

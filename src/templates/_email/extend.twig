@@ -1,0 +1,14 @@
+{% extends "lock/_email/_shell" %}
+{% block body %}
+    <p>{{ "We need longer with your request {reference}, and the law says we have to tell you why."|t('lock', {reference: request.reference}) }}</p>
+
+    <div style="border-left:3px solid #c9a227;padding:10px 16px;background:#fdf6e3;margin:20px 0;">
+        {{ reason|nl2br }}
+    </div>
+
+    <p>{{ "The new date is {date}."|t('lock', {date: request.dueAt ? request.dueAt|date('j F Y') : ''}) }}</p>
+
+    <p style="font-size:13px;color:#69717a;">
+        {{ "This extension is the one allowed by Article 12(3) of the GDPR. If you think it is not justified you can complain to your supervisory authority."|t('lock') }}
+    </p>
+{% endblock %}

@@ -1,0 +1,24 @@
+{% extends "lock/_email/_shell" %}
+{% block body %}
+    {% set days = request.daysRemaining() %}
+
+    <p style="font-size:17px;">
+        {%- if days < 0 -%}
+            <strong>{{ "{reference} is {n} days late."|t('lock', {reference: request.reference, n: days|abs}) }}</strong>
+        {%- else -%}
+            <strong>{{ "{n} days left on {reference}."|t('lock', {n: days, reference: request.reference}) }}</strong>
+        {%- endif -%}
+    </p>
+
+    <p>{{ "{type} from {email}, received {date}."|t('lock', {
+        type: request.typeLabel(),
+        email: request.email,
+        date: request.receivedAt|date('j F Y'),
+    }) }}</p>
+
+    {% if days < 0 %}
+        <p>{{ "A late answer is itself a breach of Article 12(3), separately from whatever the request was about."|t('lock') }}</p>
+    {% endif %}
+
+    <p><a href="{{ url }}">{{ "Open it"|t('lock') }}</a></p>
+{% endblock %}

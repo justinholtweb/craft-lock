@@ -1,0 +1,26 @@
+name: craft-lock
+type: php
+docroot: ""
+php_version: "8.3"
+webserver_type: nginx-fpm
+xdebug_enabled: false
+additional_hostnames: []
+additional_fqdns: []
+database:
+    type: mariadb
+    version: "10.11"
+use_dns_when_possible: true
+composer_version: "2"
+corepack_enable: false
+
+# Lock is a plugin package, not a site — this DDEV project exists so the unit
+# suite runs against a pinned PHP, with none of the host's own PHP
+# configuration bleeding in, and so `composer install` here can't disturb the
+# plugin-testing harness the plugin is symlinked into.
+#
+#   ddev start
+#   ddev composer install
+#   ddev exec vendor/bin/phpunit
+#
+# Everything that needs a live Craft is exercised in the harness instead — see
+# tests/README.md.

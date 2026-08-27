@@ -1,0 +1,18 @@
+{% extends "lock/_email/_shell" %}
+{% block body %}
+    <p>{{ "Your request {reference} is finished."|t('lock', {reference: request.reference}) }}</p>
+
+    {% if request.outcome %}
+        <div style="border-left:3px solid #c9a227;padding:10px 16px;background:#fdf6e3;margin:20px 0;">
+            {{ request.outcome|nl2br }}
+        </div>
+    {% endif %}
+
+    {# Article 12(4). A person told "no" has to be told they can complain to a regulator, and told
+       it at the moment they are refused — not left to find it in a policy page. #}
+    {% if request.status == 'refused' %}
+        <p>{{ "If you disagree with this, you can complain to your data protection supervisory authority, and you can ask a court to look at it. You do not need our permission to do either."|t('lock') }}</p>
+    {% endif %}
+
+    <p>{{ "If anything about this is not right, reply to this email and a person will read it."|t('lock') }}</p>
+{% endblock %}

@@ -1,0 +1,89 @@
+{% extends "_layouts/cp" %}
+{% import "_includes/forms" as forms %}
+
+{% set title = "Consent"|t('lock') %}
+{% set selectedSubnavItem = 'consent' %}
+
+{% block content %}
+    {% include "lock/_partials/style" %}
+
+    <p class="light">
+        {{ "Consent recorded against a person, not a browser. A cookie banner answers “does this visitor allow analytics”; this answers “was this named person allowed to be emailed in March, and what were they shown”."|t('lock') }}
+    </p>
+
+    <div class="lock-grid">
+        {% for purpose, label in purposes %}
+            {% set counts = tally[purpose] ?? {granted: 0, withdrawn: 0} %}
+            <div class="lock-stat">
+                <h4>{{ label }}</h4>
+                <div class="lock-figure">{{ counts.granted }}</div>
+                <span class="light">{{ "{n} have withdrawn"|t('lock', {n: counts.withdrawn}) }}</span>
+            </div>
+        {% endfor %}
+    </div>
+
+    {% if stale|length %}
+        <div class="lock-flag">
+            <strong>{{ "{n} consent records are past their re-ask date."|t('lock', {n: stale|length}) }}</strong>
+            {{ "Consent does not expire in law, but consent given years ago to a different wording is hard to rely on. Ask again."|t('lock') }}
+        </div>
+    {% endif %}
+
+    <form method="get" action="{{ url('lock/consent') }}" class="flex" style="margin-bottom:18px;">
+        <div class="flex-grow"><input type="text" class="text fullwidth" name="search" value="{{ criteria.search }}" placeholder="{{ 'Email address'|t('lock') }}"></div>
+        <div>{{ forms.select({name: 'purpose', value: criteria.purpose, options: [{label: "Every purpose"|t('lock'), value: ''}]|merge(purposes|keys|map(k => {label: purposes[k], value: k}))}) }}</div>
+        <div>{{ forms.select({name: 'state', value: criteria.state, options: [
+            {label: "Any"|t('lock'), value: ''},
+            {label: "Granted"|t('lock'), value: 'granted'},
+            {label: "Withdrawn"|t('lock'), value: 'withdrawn'},
+            {label: "Refused"|t('lock'), value: 'refused'},
+        ]}) }}</div>
+        <div><button type="submit" class="btn">{{ "Filter"|t('lock') }}</button></div>
+    </form>
+
+    <table class="data fullwidth">
+        <thead>
+            <tr>
+                <th>{{ "Recorded"|t('lock') }}</th>
+                <th>{{ "Address"|t('lock') }}</th>
+                <th>{{ "Purpose"|t('lock') }}</th>
+                <th>{{ "Decision"|t('lock') }}</th>
+                <th>{{ "Through"|t('lock') }}</th>
+                <th>{{ "Evidence"|t('lock') }}</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for entry in entries %}
+                <tr>
+                    <td class="thin">{{ entry.recordedAt|datetime('short') }}</td>
+                    <td>{{ entry.email }}</td>
+                    <td>{{ purposes[entry.purpose] ?? entry.purpose }}</td>
+                    <td>{{ entry.stateLabel() }}</td>
+                    <td class="light">{{ entry.source }}</td>
+                    <td class="light">
+                        {%- if entry.evidence.text is defined %}{{ entry.evidence.text|slice(0, 90) }}
+                        {%- elseif entry.evidence.url is defined %}{{ entry.evidence.url }}
+                        {%- else %}—{% endif -%}
+                    </td>
+                </tr>
+            {% else %}
+                <tr><td colspan="6" class="light">{{ "Nothing recorded yet."|t('lock') }}</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <h2>{{ "Record one by hand"|t('lock') }}</h2>
+
+    <p class="light">{{ "For a paper form, a phone call, or an unsubscribe that came in by email. It is stamped with your name, because who recorded it is part of the evidence."|t('lock') }}</p>
+
+    <form method="post" class="flex">
+        {{ csrfInput() }}{{ actionInput('lock/consent/record') }}{{ redirectInput('lock/consent') }}
+        <div class="flex-grow"><input type="email" class="text fullwidth" name="email" placeholder="{{ 'Email address'|t('lock') }}" required></div>
+        <div>{{ forms.select({name: 'purpose', options: purposes|keys|map(k => {label: purposes[k], value: k})}) }}</div>
+        <div>{{ forms.select({name: 'state', options: [{label: "Granted"|t('lock'), value: 'granted'}, {label: "Withdrawn"|t('lock'), value: 'withdrawn'}]}) }}</div>
+        <div class="flex-grow"><input type="text" class="text fullwidth" name="evidence" placeholder="{{ 'What they were shown or said'|t('lock') }}"></div>
+        <div><button type="submit" class="btn submit">{{ "Record"|t('lock') }}</button></div>
+    </form>
+
+    <p style="margin-top:20px;"><a class="btn" href="{{ url('lock/consent/export') }}">{{ "Export the ledger"|t('lock') }}</a></p>
+{% endblock %}

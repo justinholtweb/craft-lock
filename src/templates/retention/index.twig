@@ -1,0 +1,92 @@
+{% extends "_layouts/cp" %}
+
+{% set title = "Retention"|t('lock') %}
+{% set selectedSubnavItem = 'retention' %}
+
+{% block actionButton %}
+    <div class="btngroup">
+        <a class="btn" href="{{ url('lock/retention/history') }}">{{ "History"|t('lock') }}</a>
+        <a class="btn" href="{{ url('lock/settings/retention') }}">{{ "Edit rules"|t('lock') }}</a>
+    </div>
+{% endblock %}
+
+{% block content %}
+    {% include "lock/_partials/style" %}
+
+    <p class="light">
+        {{ "Storage limitation — Article 5(1)(e) — is the principle nobody implements, because implementing it means writing down how long you keep things and then actually doing it. A rule is both halves at once."|t('lock') }}
+    </p>
+
+    {% if nextRun %}
+        <p class="light">{{ "Next scheduled run: {date}."|t('lock', {date: nextRun|datetime('short')}) }}</p>
+    {% else %}
+        <div class="lock-flag">{{ "Scheduled runs are switched off. Rules can still be run by hand, or from cron with craft lock/retention/due."|t('lock') }}</div>
+    {% endif %}
+
+    {% for key, rule in rules %}
+        <div class="pane" style="margin-bottom:14px;">
+            <div class="flex">
+                <div class="flex-grow">
+                    <h2 style="margin:0;">
+                        {{ rule.label }}
+                        {% if not rule.enabled %}<span class="lock-action lock-action-skip">{{ "off"|t('lock') }}</span>{% endif %}
+                        {% if rule.mode == 'report' %}<span class="lock-action lock-action-skip">{{ "report only"|t('lock') }}</span>{% endif %}
+                    </h2>
+                    <p class="light" style="margin:4px 0 0;">
+                        {{ rule.sentence() }}
+                        {{ "Last run {date}."|t('lock', {date: lastRuns[key] ? lastRuns[key]|datetime('short') : "never"|t('lock')}) }}
+                    </p>
+                    {% if rule.justification %}<p class="light" style="margin:2px 0 0;">{{ rule.justification }}</p>{% endif %}
+                </div>
+                <div>
+                    <button type="button" class="btn lock-preview-btn" data-key="{{ key }}">{{ "Preview"|t('lock') }}</button>
+                    <form method="post" style="display:inline;">
+                        {{ csrfInput() }}{{ actionInput('lock/retention/run') }}{{ redirectInput('lock/retention') }}
+                        {{ hiddenInput('key', key) }}
+                        <button type="submit" class="btn submit">{{ "Run now"|t('lock') }}</button>
+                    </form>
+                </div>
+            </div>
+            <div class="lock-preview-output hidden" data-for="{{ key }}" style="margin-top:14px;"></div>
+        </div>
+    {% else %}
+        <div class="lock-flag">
+            {{ "No retention rules. Nothing on this site is ever deleted for age, which means the site is keeping personal data forever by default."|t('lock') }}
+            <p><a class="btn submit" href="{{ url('lock/settings/retention') }}">{{ "Write the first one"|t('lock') }}</a></p>
+        </div>
+    {% endfor %}
+
+    {% if uncovered|length %}
+        <h2>{{ "Nothing points at these"|t('lock') }}</h2>
+        <table class="data fullwidth">
+            <thead><tr><th>{{ "Scope"|t('lock') }}</th><th>{{ "What it holds"|t('lock') }}</th><th>{{ "Suggested"|t('lock') }}</th></tr></thead>
+            <tbody>
+                {% for scope in uncovered %}
+                    <tr>
+                        <td><code>{{ scope.key }}</code><br>{{ scope.label }}</td>
+                        <td>{{ scope.description }}<br><span class="light">{{ "Measured from {from}."|t('lock', {from: scope.measuredFrom}) }}</span></td>
+                        <td class="light">{{ scope.suggestedMonths ? "{n} months"|t('lock', {n: scope.suggestedMonths}) : '—' }}</td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    {% endif %}
+
+    {% js %}
+        document.querySelectorAll('.lock-preview-btn').forEach(function(button) {
+            button.addEventListener('click', function() {
+                var key = button.dataset.key;
+                var output = document.querySelector('.lock-preview-output[data-for="' + key + '"]');
+                button.classList.add('loading');
+
+                Craft.sendActionRequest('POST', 'lock/retention/preview', { data: { key: key } })
+                    .then(function(response) {
+                        output.innerHTML = response.data.html;
+                        output.classList.remove('hidden');
+                    })
+                    .catch(function() { Craft.cp.displayError('Could not build the preview.'); })
+                    .finally(function() { button.classList.remove('loading'); });
+            });
+        });
+    {% endjs %}
+{% endblock %}

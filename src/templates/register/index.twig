@@ -1,0 +1,60 @@
+{% extends "_layouts/cp" %}
+
+{% set title = "Record of processing"|t('lock') %}
+{% set selectedSubnavItem = 'register' %}
+
+{% block actionButton %}
+    <div class="btngroup">
+        <a class="btn" href="{{ url('lock/register/report') }}">{{ "Printable report"|t('lock') }}</a>
+        <a class="btn submit add icon" href="{{ url('lock/register/new') }}">{{ "New entry"|t('lock') }}</a>
+    </div>
+{% endblock %}
+
+{% block content %}
+    {% include "lock/_partials/style" %}
+
+    <p class="light">
+        {{ "Article 30 asks for one entry per purpose you process personal data for. Kept here rather than in a spreadsheet, it can be checked against what the site demonstrably holds — which is the only way it stays true."|t('lock') }}
+    </p>
+
+    {% if gaps|length %}
+        <div class="lock-flag">
+            <strong>{{ "{n} things the register does not account for."|t('lock', {n: gaps|length}) }}</strong>
+            <ul>{% for gap in gaps %}<li>{{ gap }}</li>{% endfor %}</ul>
+        </div>
+    {% endif %}
+
+    <table class="data fullwidth">
+        <thead>
+            <tr>
+                <th>{{ "Activity"|t('lock') }}</th>
+                <th>{{ "Lawful basis"|t('lock') }}</th>
+                <th>{{ "Retention"|t('lock') }}</th>
+                <th>{{ "Systems"|t('lock') }}</th>
+                <th>{{ "Reviewed"|t('lock') }}</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for activity in activities %}
+                <tr>
+                    <td>
+                        <a href="{{ url('lock/register/' ~ activity.id) }}">{{ activity.name }}</a>
+                        {% if activity.isIncomplete() %}<span class="lock-action lock-action-anonymise">{{ "incomplete"|t('lock') }}</span>{% endif %}
+                        {% if activity.purpose %}<div class="light">{{ activity.purpose|slice(0, 120) }}</div>{% endif %}
+                    </td>
+                    <td>{{ activity.basisLabel() }}</td>
+                    <td>{{ activity.retention ?: '—' }}</td>
+                    <td class="light">{{ activity.systems|join(', ') ?: '—' }}</td>
+                    <td class="light">{{ activity.reviewedAt ? activity.reviewedAt|date('short') : "never"|t('lock') }}</td>
+                </tr>
+            {% else %}
+                <tr><td colspan="5" class="light">{{ "The register is empty."|t('lock') }}</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <form method="post" style="margin-top:18px;">
+        {{ csrfInput() }}{{ actionInput('lock/register/review') }}{{ redirectInput('lock/register') }}
+        <button type="submit" class="btn">{{ "Mark the whole register reviewed today"|t('lock') }}</button>
+    </form>
+{% endblock %}

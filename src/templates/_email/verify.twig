@@ -1,0 +1,22 @@
+{% extends "lock/_email/_shell" %}
+{% block body %}
+    <p>{{ "Somebody — we hope you — asked us to {action}."|t('lock', {action: request.typeLabel()|lower}) }}</p>
+
+    <p>{{ "Before we do anything, we need to know it was you. Click the link below and we will start work."|t('lock') }}</p>
+
+    <p style="margin:24px 0;">
+        <a href="{{ url }}" style="background:#2a2f36;color:#fff;padding:12px 20px;border-radius:5px;text-decoration:none;display:inline-block;">
+            {{ "Yes, that was me"|t('lock') }}
+        </a>
+    </p>
+
+    <p style="font-size:13px;color:#69717a;">{{ "Or paste this into your browser:"|t('lock') }}<br>{{ url }}</p>
+
+    <p>{{ "Your reference is {reference}."|t('lock', {reference: request.reference}) }}</p>
+
+    {# The paragraph that makes verification worth doing. Somebody whose address was typed into a
+       form by a stranger finds out here, before anything of theirs has been touched. #}
+    <p style="font-size:13px;color:#69717a;">
+        {{ "If this was not you, do nothing at all. The link expires on its own and we will not act on the request. Nothing about you has been looked at, changed or deleted."|t('lock') }}
+    </p>
+{% endblock %}
