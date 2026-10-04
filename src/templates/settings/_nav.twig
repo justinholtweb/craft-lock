@@ -1,0 +1,11 @@
+{# The settings section's own navigation, in the left gutter where Craft puts every other
+   section's sub-pages. Included from each settings screen's sidebar block. #}
+{% include "_includes/nav" with {
+    label: "Settings"|t('lock'),
+    items: {
+        general: {label: "General"|t('lock'), url: url('lock/settings')},
+        collectors: {label: "Where to look"|t('lock'), url: url('lock/settings/collectors')},
+        retention: {label: "Retention rules"|t('lock'), url: url('lock/settings/retention')},
+    },
+    selectedItem: selectedItem,
+} only %}

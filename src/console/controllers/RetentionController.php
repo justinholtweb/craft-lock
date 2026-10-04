@@ -2,10 +2,13 @@
 
 namespace justinholtweb\lock\console\controllers;
 
+use Craft;
 use craft\console\Controller;
+use craft\helpers\App;
 use craft\helpers\Console;
 use justinholtweb\lock\models\ErasureTarget;
 use justinholtweb\lock\Plugin;
+use justinholtweb\lock\queue\ApplyRetentionRules;
 use yii\console\ExitCode;
 
 /**
@@ -38,48 +41,68 @@ class RetentionController extends Controller
     }
 
     /**
-     * Retention is a Pro feature, and the gate is here rather than inside one action — a console
-     * command that lists the rules on Lite while refusing to run them is a confusing half-answer,
-     * and it is also what a smoke test uses to tell the two editions apart.
+     * Retention is a Pro feature, and every action says so with a non-zero exit.
+     *
+     * Not done in `beforeAction()`: returning false from there ends the command with exit code 0,
+     * so a cron job on Lite would report success every night while deleting nothing — the one
+     * failure a retention schedule must never hide.
      */
-    public function beforeAction($action): bool
+    private function refuseOnLite(): ?int
     {
-        if (!parent::beforeAction($action)) {
-            return false;
+        if (Plugin::getInstance()->isPro()) {
+            return null;
         }
 
-        if (!Plugin::getInstance()->isPro()) {
-            $this->stderr("Retention rules are a Pro feature.\n", Console::FG_RED);
+        $this->stderr("Retention rules are a Pro feature. Nothing was run.\n", Console::FG_RED);
 
-            return false;
-        }
-
-        return true;
+        return ExitCode::UNAVAILABLE;
     }
 
     /** Runs every rule that is owed a run. */
     public function actionDue(): int
     {
-        $outcomes = Plugin::getInstance()->retention->runDue($this->dryRun);
+        if (($refused = $this->refuseOnLite()) !== null) {
+            return $refused;
+        }
 
-        if ($outcomes === []) {
-            $this->stdout("Nothing due.\n", Console::FG_GREY);
+        App::maxPowerCaptain();
+
+        $mutex = Craft::$app->getMutex();
+
+        if (!$mutex->acquire(ApplyRetentionRules::MUTEX)) {
+            $this->stderr("Another retention run is in progress. Nothing was run.\n", Console::FG_YELLOW);
+
+            return ExitCode::TEMPFAIL;
+        }
+
+        try {
+            $outcomes = Plugin::getInstance()->retention->runDue($this->dryRun);
+
+            if ($outcomes === []) {
+                $this->stdout("Nothing due.\n", Console::FG_GREY);
+
+                return ExitCode::OK;
+            }
+
+            foreach ($outcomes as $key => $outcome) {
+                $this->stdout(sprintf("%-28s %s\n", $key, $outcome->summary()), $outcome->isClean() ? Console::FG_GREEN : Console::FG_RED);
+            }
+
+            Plugin::getInstance()->notifications->sendRetentionReport($outcomes);
 
             return ExitCode::OK;
+        } finally {
+            $mutex->release(ApplyRetentionRules::MUTEX);
         }
-
-        foreach ($outcomes as $key => $outcome) {
-            $this->stdout(sprintf("%-28s %s\n", $key, $outcome->summary()), $outcome->isClean() ? Console::FG_GREEN : Console::FG_RED);
-        }
-
-        Plugin::getInstance()->notifications->sendRetentionReport($outcomes);
-
-        return ExitCode::OK;
     }
 
     /** Runs one rule now, whether or not it is due. */
     public function actionRun(): int
     {
+        if (($refused = $this->refuseOnLite()) !== null) {
+            return $refused;
+        }
+
         if ($this->rule === null) {
             $this->stderr("--rule is needed.\n", Console::FG_RED);
 
@@ -94,19 +117,37 @@ class RetentionController extends Controller
             return ExitCode::USAGE;
         }
 
-        $outcome = Plugin::getInstance()->retention->run($rule, $this->dryRun);
+        App::maxPowerCaptain();
+
+        $mutex = Craft::$app->getMutex();
+
+        if (!$mutex->acquire(ApplyRetentionRules::MUTEX)) {
+            $this->stderr("Another retention run is in progress. Nothing was run.\n", Console::FG_YELLOW);
+
+            return ExitCode::TEMPFAIL;
+        }
+
+        try {
+            $outcome = Plugin::getInstance()->retention->run($rule, $this->dryRun);
+        } finally {
+            $mutex->release(ApplyRetentionRules::MUTEX);
+        }
 
         $this->stdout($outcome->summary() . "\n", $outcome->isClean() ? Console::FG_GREEN : Console::FG_RED);
 
-        return ExitCode::OK;
+        return $outcome->isClean() ? ExitCode::OK : ExitCode::UNSPECIFIED_ERROR;
     }
 
     /** Lists the rules, and the scopes nothing is pointed at. */
     public function actionStatus(): int
     {
+        if (($refused = $this->refuseOnLite()) !== null) {
+            return $refused;
+        }
+
         $retention = Plugin::getInstance()->retention;
 
-        foreach ($retention->rules() as $key => $rule) {
+        foreach ($retention->allRules() as $key => $rule) {
             $last = $retention->lastRun($key, true);
 
             $this->stdout(sprintf('%-24s ', $key), $rule->enabled ? Console::FG_CYAN : Console::FG_GREY);
@@ -133,6 +174,10 @@ class RetentionController extends Controller
     /** Shows what a rule would do. */
     public function actionPreview(): int
     {
+        if (($refused = $this->refuseOnLite()) !== null) {
+            return $refused;
+        }
+
         if ($this->rule === null) {
             $this->stderr("--rule is needed.\n", Console::FG_RED);
 

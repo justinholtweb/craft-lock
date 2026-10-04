@@ -1,3 +1,10 @@
+---
+title: Installation
+slug: installation
+order: 10
+summary: Requirements, install, editions, and what Lock talks to when it is there.
+---
+
 # Installation
 
 ```bash
@@ -8,6 +15,28 @@ php craft plugin/install lock
 Craft 5.3 or later, PHP 8.2 or later. No other dependencies — Lock talks to Commerce, Formie,
 Freeform, Comments and Toss when they are there, and records them as *not searched* when they are
 not.
+
+## Editions
+
+**Everything needed to answer a request lawfully is in Lite**, and Lite is free — it is not a
+trial and it does not expire. Pro is the recurring half: rules that delete on a timer, the register
+a DPO maintains, and the reminders that stop a statutory deadline passing unnoticed.
+
+| | Lite | Pro |
+| --- | --- | --- |
+| Price | **Free** | **$149** one-off, $119/year renewal |
+| Request intake, verification, status lookup | ✓ | ✓ |
+| The dossier, across all fourteen sources | ✓ | ✓ |
+| Export, anonymise, erase | ✓ | ✓ |
+| The consent ledger | ✓ | ✓ |
+| The activity ledger | ✓ | ✓ |
+| Legal holds and the suppression list | ✓ | ✓ |
+| Retention rules and their scheduling | — | ✓ |
+| The Article 30 register and its report | — | ✓ |
+| Deadline reminders | — | ✓ |
+
+A site on Lite can comply in full. It does the repeating parts by hand.
+
 
 ## The first fifteen minutes
 
@@ -41,7 +70,9 @@ That is the moment most sites discover what they are holding.
 ```
 
 The first is the one that matters. Nothing else on the site will tell you it is about to miss a
-statutory deadline while there is still time to do something about it.
+statutory deadline while there is still time to do something about it. On Lite it still expires
+dead confirmation links but sends no reminders, and `lock/retention/due` exits non-zero — leave it
+off a Lite site's crontab.
 
 If the site has no cron, *Settings → Retention rules → Triggered by → Control panel traffic* fires
 the retention half from control-panel page loads. It only ever queues a job; nothing is deleted
@@ -52,11 +83,14 @@ inside a page request.
 | Permission | Lets somebody |
 |---|---|
 | See requests, the ledger and the register | read everything, change nothing |
-| Work requests | assemble, export, correspond, close |
+| Work requests | assemble, export (including the whole consent ledger), correspond, close |
 | Anonymise and delete personal data | actually carry out an erasure |
 | Place and lift legal holds | stop a deletion, or unstop it |
 | Edit the record of processing activities | maintain the register |
 | Run retention rules | run a purge by hand |
+
+Without the first one, Lock is not in the navigation at all. Deleting a request outright needs an
+administrator, and works even when admin changes are switched off.
 
 Erasure is deliberately separate from working a request. Somebody in support should be able to
 answer *what have you got on me* without being one click from *and now delete all of it*.

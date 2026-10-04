@@ -5,9 +5,9 @@
     <table class="data fullwidth">
         <thead>
             <tr>
-                <th>{{ "What happens"|t('lock') }}</th>
-                <th>{{ "Source"|t('lock') }}</th>
-                <th>{{ "Record"|t('lock') }}</th>
+                <th scope="col">{{ "What happens"|t('lock') }}</th>
+                <th scope="col">{{ "Source"|t('lock') }}</th>
+                <th scope="col">{{ "Record"|t('lock') }}</th>
             </tr>
         </thead>
         <tbody>
@@ -24,15 +24,15 @@
                     </td>
                 </tr>
             {% else %}
-                <tr><td colspan="3" class="light">{{ "Nothing found for this address."|t('lock') }}</td></tr>
+                <tr><td colspan="3"><p class="zilch small">{{ "Nothing found for this address."|t('lock') }}</p></td></tr>
             {% endfor %}
         </tbody>
     </table>
 </div>
 
 {% if plan.errors|length %}
-    <div class="lock-flag lock-bad" style="margin-top:14px;">
+    <div class="readable lock-mt"><blockquote class="note">
         <strong>{{ "Some sources could not be read, so this plan is incomplete."|t('lock') }}</strong>
         <ul>{% for error in plan.errors %}<li>{{ error }}</li>{% endfor %}</ul>
-    </div>
+    </blockquote></div>
 {% endif %}

@@ -61,7 +61,7 @@ class RetentionRule extends Model
         $rule->mode = in_array($row['mode'] ?? '', [self::MODE_ERASE, self::MODE_ANONYMISE, self::MODE_REPORT], true)
             ? (string)$row['mode']
             : self::MODE_ANONYMISE;
-        $rule->enabled = !empty($row['enabled']) && $row['enabled'] !== '0';
+        $rule->enabled = !empty($row['enabled']);
         $rule->justification = trim((string)($row['justification'] ?? ''));
         $rule->limit = max(1, (int)($row['limit'] ?? 500));
 
@@ -86,7 +86,7 @@ class RetentionRule extends Model
     /** The collector handle the scope belongs to. */
     public function source(): string
     {
-        return explode(':', $this->scope)[0] ?? '';
+        return explode(':', $this->scope)[0];
     }
 
     /**

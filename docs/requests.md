@@ -1,3 +1,10 @@
+---
+title: Answering a request
+slug: requests
+order: 20
+summary: The deadlines the law actually sets, intake, verification, the dossier, and closing a request out.
+---
+
 # Answering a request
 
 ## What the law actually asks
@@ -13,7 +20,15 @@ email, and why the clock starts by itself.
 ## The route in
 
 **From the site.** Somebody fills in the form. Lock creates the request, sets the deadline, and
-emails the address that was typed. Nothing else happens until they follow the link.
+emails the address that was typed. Nothing else happens until they follow the link and press the
+button on the page it opens.
+
+The button is not decoration. Mail security gateways, link previewers and "safe links" rewriters
+open every URL in an inbound message, so a link that confirmed on its own would be confirmed by
+the subject's mail filter before the subject saw it. Opening `/lock/verify/<code>` only shows a
+page; the confirmation is a POST from that page. Until then nothing can be assembled or erased for
+the request — the control panel refuses both — and an unconfirmed request does not count as a
+hold, so a stranger typing somebody's address into the form cannot freeze retention for them.
 
 That link is what makes the whole thing safe. The email says, in as many words: *if this was not
 you, do nothing at all — nothing about you has been looked at, changed or deleted.* Somebody
@@ -56,23 +71,40 @@ claimed once. There is no second one.
 
 ## What the subject sees
 
-- **On submitting:** the same sentence whether or not you hold anything about them. Anything else
-  is an oracle: a form that says "no account found" tells a stranger whether an address is
-  registered.
+- **On submitting:** the same sentence whether or not you hold anything about them — and over
+  JSON, the same body, with no reference in it. Anything else is an oracle: a form that says "no
+  account found", or a reference that only appears when the address was real, tells a stranger
+  whether the submission landed. The reference reaches the subject by email.
+- **On following the link:** a page asking them to confirm, with a button.
 - **On confirming:** their reference, what they asked for, and the date they will hear by.
 - **Any time after:** `/lock/status`, with their reference *and* their address. Both, because a
-  reference is sequential by design — it is meant to be quoted in correspondence.
+  reference is sequential by design — it is meant to be quoted in correspondence. Lookups are rate
+  limited by IP and by reference, and a limited lookup gets the same "could not match" as a wrong
+  one.
 - **On completion:** what was decided, in your words.
 
-Every one of those pages can be overridden. A site template at `lock/verify.twig` or
-`lock/status.twig` wins over Lock's built-in one. The built-ins are deliberately plain and
-self-contained so that the link in a verification email never 404s on a fresh install.
+Every one of those pages can be overridden. A site template at `lock/verify.twig` (the confirm
+page), `lock/verified.twig` (the result) or `lock/status.twig` wins over Lock's built-in one. An
+overridden `verify.twig` must post `code` and `action=lock/portal/verify` with a CSRF token, as
+the built-in one does. The built-ins are deliberately plain and self-contained so that the link in
+a verification email never 404s on a fresh install.
+
+## When an erasure request is answered
+
+Closing an erasure request as completed anonymises the request itself, once the completion email
+has gone. The reference, the type, every date, the outcome and the timeline stay — that is the
+evidence the request was handled — and the address becomes the same pseudonym every other source
+got, so the request still lines up with the erasure certificate. The name, the message, where it
+was sent from, and any dossier built for it, file and all, are removed. Until then the request is
+deliberately left alone: it is how the answer gets back to the person.
 
 ## Reminders
 
-`php craft lock/requests/deadlines`, nightly. It emails staff when a request crosses a reminder
-threshold — seven days out and two by default — and expires requests whose confirmation link ran
-out.
+`php craft lock/requests/deadlines`, nightly. On Pro it emails staff when a request crosses a
+reminder threshold — seven days out and two by default — unless staff notifications are switched
+off. On both editions it expires requests whose confirmation link ran out; Craft's garbage
+collection does the same, along with deleting old dossier archives, so a site with no cron still
+tidies up.
 
 Expired requests are not deleted. "Somebody asked and never confirmed it was them" is worth being
 able to show, particularly if the address belonged to somebody else.

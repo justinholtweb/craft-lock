@@ -6,6 +6,7 @@ use Craft;
 use craft\db\Query;
 use craft\helpers\Db;
 use DateTime;
+use justinholtweb\lock\helpers\Address;
 use justinholtweb\lock\helpers\Readable;
 use justinholtweb\lock\models\Bundle;
 use justinholtweb\lock\models\DataRecord;
@@ -78,6 +79,7 @@ class FormieCollector extends BaseCollector
 
         $records = [];
 
+        // @phpstan-ignore class.notFound (Formie is optional; isAvailable() checks class_exists first)
         foreach (\verbb\formie\elements\Submission::find()->id($ids)->status(null)->isIncomplete(null)->isSpam(null)->limit(null)->all() as $submission) {
             $data = ['Form' => $submission->getForm()?->title, 'Submitted' => $submission->dateCreated?->format('Y-m-d H:i:s')];
 
@@ -94,7 +96,7 @@ class FormieCollector extends BaseCollector
             }
 
             $record = $this->record("submission:$submission->id", Craft::t('lock', '“{form}” submitted {date}', [
-                'form' => $submission->getForm()?->title ?? Craft::t('lock', 'Form'),
+                'form' => $submission->getForm()->title ?? Craft::t('lock', 'Form'),
                 'date' => $submission->dateCreated?->format('Y-m-d'),
             ]), $data);
             $record->kind = DataRecord::KIND_ELEMENT;
@@ -115,25 +117,35 @@ class FormieCollector extends BaseCollector
             return [];
         }
 
-        $encoded = json_encode($email, JSON_UNESCAPED_UNICODE);
-        $needles = array_unique([$email, $encoded === false ? $email : substr($encoded, 1, -1)]);
-
         $conditions = ['or'];
 
-        foreach ($needles as $needle) {
+        foreach (Address::needles($email) as $needle) {
             $conditions[] = ['like', 'content', $needle];
         }
 
-        return array_map('intval', (new Query())
-            ->select(['id'])
+        // `LIKE` narrows it down; the bounded match decides. `%lex@corp.co%` is also a substring
+        // of `alex@corp.com`, and a disclosure that hands Alex's enquiry to Lex is a breach.
+        $rows = (new Query())
+            ->select(['id', 'content'])
             ->from(['{{%formie_submissions}}'])
             ->where($conditions)
-            ->limit(500)
-            ->column());
+            ->limit(2500)
+            ->all();
+
+        $ids = [];
+
+        foreach ($rows as $row) {
+            if (Address::contains(is_string($row['content']) ? $row['content'] : null, $email)) {
+                $ids[] = (int)$row['id'];
+            }
+        }
+
+        return array_slice($ids, 0, 500);
     }
 
     public function apply(ErasureTarget $target, Subject $subject): void
     {
+        // @phpstan-ignore class.notFound (Formie is optional; isAvailable() checks class_exists first)
         $submission = Craft::$app->getElements()->getElementById($this->keyId($target->key), \verbb\formie\elements\Submission::class);
 
         if ($submission === null) {
@@ -155,12 +167,13 @@ class FormieCollector extends BaseCollector
             foreach ($layout->getCustomFields() as $field) {
                 $value = $submission->getSerializedFieldValues([$field->handle])[$field->handle] ?? null;
 
-                if (is_string($value) && stripos($value, $subject->normalisedEmail()) !== false) {
-                    $submission->setFieldValue($field->handle, str_ireplace($subject->normalisedEmail(), $replacement, $value));
+                if (Address::containsDeep($value, $subject->normalisedEmail())) {
+                    $submission->setFieldValue($field->handle, Address::replaceDeep($value, $subject->normalisedEmail(), $replacement));
                 }
             }
         }
 
+        // @phpstan-ignore property.notFound (a Formie Submission, which PHPStan cannot see because Formie is optional)
         $submission->ipAddress = null;
 
         Craft::$app->getElements()->saveElement($submission, false);
@@ -194,6 +207,7 @@ class FormieCollector extends BaseCollector
             return [];
         }
 
+        // @phpstan-ignore class.notFound (Formie is optional; isAvailable() checks class_exists first)
         $query = \verbb\formie\elements\Submission::find()
             ->status(null)
             ->dateCreated('< ' . Db::prepareDateForDb($cutoff))
@@ -210,7 +224,7 @@ class FormieCollector extends BaseCollector
 
         foreach ($query->all() as $submission) {
             $record = $this->record("submission:$submission->id", Craft::t('lock', '“{form}” from {date}', [
-                'form' => $submission->getForm()?->title ?? Craft::t('lock', 'Form'),
+                'form' => $submission->getForm()->title ?? Craft::t('lock', 'Form'),
                 'date' => $submission->dateCreated?->format('Y-m-d'),
             ]), []);
             $record->kind = DataRecord::KIND_ELEMENT;

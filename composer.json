@@ -21,6 +21,7 @@
         "ccpa"
     ],
     "license": "proprietary",
+    "homepage": "https://justinholt.com/plugins/craft-lock",
     "minimum-stability": "dev",
     "prefer-stable": true,
     "authors": [
@@ -30,7 +31,7 @@
         }
     ],
     "support": {
-        "docs": "https://craft-lock.com/docs",
+        "docs": "https://justinholt.com/plugins/craft-lock/docs",
         "source": "https://github.com/justinholtweb/craft-lock",
         "issues": "https://github.com/justinholtweb/craft-lock/issues"
     },
@@ -42,7 +43,8 @@
     "require-dev": {
         "craftcms/ecs": "dev-main",
         "craftcms/phpstan": "dev-main",
-        "phpunit/phpunit": "^10.5"
+        "phpunit/phpunit": "^10.5",
+        "phpstan/phpstan": "^1.12 || ^2.2"
     },
     "autoload": {
         "psr-4": {
@@ -69,7 +71,7 @@
         "handle": "lock",
         "developer": "Justin Holt",
         "developerUrl": "https://justinholt.com",
-        "documentationUrl": "https://craft-lock.com/docs",
+        "documentationUrl": "https://justinholt.com/plugins/craft-lock/docs",
         "changelogUrl": "https://raw.githubusercontent.com/justinholtweb/craft-lock/main/CHANGELOG.md",
         "class": "justinholtweb\\lock\\Plugin"
     }

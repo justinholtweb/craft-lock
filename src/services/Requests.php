@@ -7,11 +7,13 @@ use craft\base\Component;
 use craft\db\Query;
 use craft\helpers\DateTimeHelper;
 use craft\helpers\Db;
+use craft\helpers\Json;
 use craft\helpers\StringHelper;
 use craft\helpers\UrlHelper;
 use DateInterval;
 use DateTime;
 use justinholtweb\lock\events\RequestEvent;
+use justinholtweb\lock\helpers\Address;
 use justinholtweb\lock\helpers\Reference;
 use justinholtweb\lock\models\Request;
 use justinholtweb\lock\models\Settings;
@@ -20,6 +22,7 @@ use justinholtweb\lock\Plugin;
 use justinholtweb\lock\records\ActivityRecord;
 use justinholtweb\lock\records\RequestEventRecord;
 use justinholtweb\lock\records\RequestRecord;
+use yii\base\InvalidCallException;
 
 /**
  * The life of a data subject request, from the form to the answer.
@@ -69,7 +72,7 @@ class Requests extends Component
             return false;
         }
 
-        $this->addEvent($request, RequestEventRecord::TYPE_RECEIVED, Craft::t('lock', 'Received through {source}.', ['source' => $request->source]));
+        $this->addEvent($request, RequestEventRecord::TYPE_RECEIVED, Craft::t('lock', 'Received through {source}.', ['source' => $request->sourceLabel()]));
 
         Plugin::getInstance()->activity->log(
             ActivityRecord::CATEGORY_REQUEST,
@@ -309,7 +312,145 @@ class Requests extends Component
             Plugin::getInstance()->notifications->sendCompletion($request);
         }
 
+        // An answered erasure request is the last place the address survives. The collectors
+        // cannot reach it — an open request is retained so the answer has somewhere to go — so it
+        // is done here, once the answer has gone.
+        if ($request->type === Request::TYPE_ERASURE && $status === Request::STATUS_COMPLETED) {
+            $this->anonymise($request);
+        }
+
         return true;
+    }
+
+    /**
+     * Takes the person out of a finished request, leaving the evidence that it was handled.
+     *
+     * What stays: the reference, the type, every date, the outcome and the timeline — which is
+     * what a supervisory authority asks for. What goes: the address (replaced with the same
+     * pseudonym every other source got, so the request still lines up with the erasure
+     * certificate), the name, what they wrote, where they wrote it from, and any dossier built
+     * for them, file and all.
+     */
+    public function anonymise(Request $request): bool
+    {
+        /** @var Settings $settings */
+        $settings = Plugin::getInstance()->getSettings();
+        $subject = $request->getSubject();
+        $email = $subject->normalisedEmail();
+
+        if ($request->id === null || $email === '') {
+            return false;
+        }
+
+        $domain = $settings->anonymousDomain ?: 'anonymised.invalid';
+
+        // Already done — the address is somebody's pseudonym, not somebody.
+        if (str_starts_with($email, 'anon-') && str_ends_with($email, '@' . $domain)) {
+            return true;
+        }
+
+        $pseudonym = $subject->pseudonym() . '@' . $domain;
+
+        Plugin::getInstance()->dossiers->deleteFor($subject, $request->dossierPath);
+
+        $db = Craft::$app->getDb();
+
+        $db->createCommand()->update(RequestRecord::tableName(), [
+            'email' => $pseudonym,
+            'name' => null,
+            'userId' => null,
+            'message' => null,
+            'note' => $request->note !== null ? Address::replace($request->note, $email, $pseudonym) : null,
+            'outcome' => $request->outcome !== null ? Address::replace($request->outcome, $email, $pseudonym) : null,
+            'context' => null,
+            'tokenHash' => null,
+            'tokenExpiresAt' => null,
+            'dossierPath' => null,
+        ], ['id' => $request->id])->execute();
+
+        // The timeline is free text typed by staff and by Lock; the address is taken out of it
+        // wherever it was written down, and nothing else in it changes.
+        foreach ($this->timeline($request->id) as $event) {
+            $message = $event->message !== null ? Address::replace($event->message, $email, $pseudonym) : null;
+            $data = is_array($event->data) ? Address::replaceDeep($event->data, $email, $pseudonym) : $event->data;
+
+            if ($message !== $event->message || $data !== $event->data) {
+                $db->createCommand()->update(RequestEventRecord::tableName(), [
+                    'message' => $message,
+                    'data' => is_array($data) ? Json::encode($data) : $data,
+                ], ['id' => $event->id])->execute();
+            }
+        }
+
+        $request->email = $pseudonym;
+        $request->name = null;
+        $request->userId = null;
+        $request->message = null;
+        $request->context = [];
+        $request->dossierPath = null;
+
+        $this->addEvent($request, RequestEventRecord::TYPE_NOTE, Craft::t('lock', 'The requester’s details were anonymised once the erasure was answered.'));
+
+        Plugin::getInstance()->activity->log(
+            ActivityRecord::CATEGORY_ERASURE,
+            'request.anonymised',
+            Craft::t('lock', '{reference} anonymised after the erasure was answered.', ['reference' => $request->reference]),
+            $subject,
+            $request->id,
+        );
+
+        return true;
+    }
+
+    /**
+     * Assembles a request's dossier and writes the archive.
+     *
+     * Returns the dossier and the one-time archive password (or null when archives are not
+     * protected). The password is never stored — a password kept next to the file it protects
+     * protects nothing — so an operator who loses it assembles again, which takes seconds.
+     *
+     * @return array{0: \justinholtweb\lock\models\Dossier, 1: string|null, 2: string}
+     * @throws InvalidCallException if the request has not been confirmed
+     */
+    public function assemble(Request $request): array
+    {
+        if (!$request->isActionable()) {
+            throw new InvalidCallException(Craft::t('lock', 'This request has not been confirmed by the person who made it. Nothing can be assembled or erased until it is.'));
+        }
+
+        $plugin = Plugin::getInstance();
+
+        [$dossier, $password, $filename] = $plugin->dossiers->build($request->getSubject(), $request->id);
+
+        // One archive per request. The previous one is the same person's data a few minutes
+        // staler, and there is no reason for two copies of it to exist.
+        if ($request->dossierPath !== null && $request->dossierPath !== $filename) {
+            $previous = $plugin->dossiers->pathFor($request->dossierPath);
+
+            if (is_file($previous)) {
+                @unlink($previous);
+            }
+        }
+
+        $request->dossierPath = $filename;
+        $request->dossierBuiltAt = new DateTime();
+
+        if ($request->status === Request::STATUS_OPEN) {
+            $request->status = Request::STATUS_ASSEMBLED;
+        }
+
+        $this->save($request);
+        $this->addEvent(
+            $request,
+            RequestEventRecord::TYPE_ASSEMBLED,
+            Craft::t('lock', '{n} records assembled from {sources} sources.', [
+                'n' => $dossier->count(),
+                'sources' => count($dossier->populatedBundles()),
+            ]),
+            ['partial' => $dossier->isPartial(), 'problems' => $dossier->problems()],
+        );
+
+        return [$dossier, $password, $filename];
     }
 
     public function addEvent(Request $request, string $type, ?string $message = null, array $data = []): void
@@ -326,10 +467,13 @@ class Requests extends Component
     /** @return RequestEventRecord[] */
     public function timeline(int $requestId): array
     {
-        return RequestEventRecord::find()
+        /** @var RequestEventRecord[] $events */
+        $events = RequestEventRecord::find()
             ->where(['requestId' => $requestId])
             ->orderBy(['dateCreated' => SORT_ASC, 'id' => SORT_ASC])
             ->all();
+
+        return $events;
     }
 
     /**
@@ -458,6 +602,7 @@ class Requests extends Component
      */
     public function expireUnverified(): int
     {
+        /** @var RequestRecord[] $records */
         $records = RequestRecord::find()
             ->where(['status' => Request::STATUS_UNVERIFIED])
             ->andWhere(['<', 'tokenExpiresAt', Db::prepareDateForDb(new DateTime())])

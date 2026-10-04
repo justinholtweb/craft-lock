@@ -1,35 +1,48 @@
 {# Lock's own control-panel styling. Small on purpose: the further a plugin's screens drift from
    Craft's, the more they read as a different application bolted on. What is here is the things
-   Craft has no idiom for — a deadline that has to be readable at a glance, and a plan whose three
-   outcomes must never be confused with each other. #}
+   Craft has no idiom for: a deadline that has to be readable at a glance, and a plan whose three
+   outcomes must never be confused with each other. Colours and spacing come from Craft's own
+   tokens, so they follow whatever the control panel does with them. #}
 <style>
-    .lock-grid { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); margin-bottom: 24px; }
-    .lock-stat { background: var(--gray-050); border: 1px solid var(--hairline-color); border-radius: var(--large-border-radius); padding: 14px 16px; }
-    .lock-stat h4 { margin: 0 0 4px; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--medium-text-color); }
+    .lock-grid { display: grid; gap: var(--m); grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); margin-bottom: var(--xl); }
+    .lock-stat { background: var(--gray-050); border: 1px solid var(--border-hairline); border-radius: var(--radius-lg); padding: var(--m) var(--l); }
+    .lock-stat .lock-stat-heading { margin: 0 0 var(--xs); font-size: 11px; line-height: 1.3; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--fg-subtle); }
     .lock-stat .lock-figure { font-size: 30px; line-height: 1.1; font-weight: 600; font-variant-numeric: tabular-nums; }
-    .lock-stat.lock-alarm { border-color: var(--error-color); }
-    .lock-stat.lock-alarm .lock-figure { color: var(--error-color); }
+    .lock-stat .lock-stat-value { font-size: 18px; font-weight: 600; }
+    .lock-stat.lock-alarm { border-color: var(--fg-error); }
+    .lock-stat.lock-alarm .lock-figure { color: var(--fg-error); }
 
     .lock-due { font-variant-numeric: tabular-nums; white-space: nowrap; }
-    .lock-due.lock-overdue { color: var(--error-color); font-weight: 600; }
-    .lock-due.lock-critical { color: #b45309; font-weight: 600; }
-    .lock-due.lock-soon { color: #7a6300; }
+    .lock-due.lock-overdue { color: var(--fg-error); font-weight: 600; }
+    .lock-due.lock-critical { color: var(--fg-warning); font-weight: 600; }
+    .lock-due.lock-soon { color: var(--fg-warning); }
 
     .lock-action { display: inline-block; min-width: 5.5em; padding: 1px 7px; border-radius: 9px; font-size: 11px; font-weight: 600; text-align: center; }
-    .lock-action-erase { background: #fde2e2; color: #8a1c1c; }
-    .lock-action-anonymise { background: #fdf0d5; color: #7a5200; }
-    .lock-action-skip { background: var(--gray-100); color: var(--medium-text-color); }
+    .lock-action-erase { background: var(--bg-error); color: var(--fg-error); }
+    .lock-action-anonymise { background: var(--bg-warning); color: var(--fg-warning); }
+    .lock-action-skip { background: var(--gray-100); color: var(--fg-subtle); }
 
-    .lock-timeline { list-style: none; margin: 0; padding: 0; border-left: 2px solid var(--hairline-color); }
-    .lock-timeline li { position: relative; padding: 0 0 16px 18px; }
-    .lock-timeline li::before { content: ''; position: absolute; left: -6px; top: 6px; width: 10px; height: 10px; border-radius: 50%; background: var(--gray-300); }
-    .lock-timeline .lock-when { display: block; font-size: 11px; color: var(--medium-text-color); }
+    .lock-timeline { list-style: none; margin: 0 0 var(--l); padding: 0; border-inline-start: 2px solid var(--border-hairline); }
+    .lock-timeline li { position: relative; padding: 0 0 var(--l) var(--l); }
+    .lock-timeline li::before { content: ''; position: absolute; inset-inline-start: -6px; top: 6px; width: 10px; height: 10px; border-radius: 50%; background: var(--gray-300); }
+    .lock-timeline .lock-when { display: block; font-size: 11px; color: var(--fg-subtle); }
 
-    .lock-plan { max-height: 420px; overflow: auto; border: 1px solid var(--hairline-color); border-radius: var(--large-border-radius); }
+    .lock-plan { max-height: 420px; overflow: auto; border: 1px solid var(--border-hairline); border-radius: var(--radius-lg); }
     .lock-plan table { width: 100%; }
-    .lock-reason { font-size: 12px; color: var(--medium-text-color); }
+    .lock-reason { font-size: 12px; color: var(--fg-subtle); }
 
-    .lock-flag { background: #fdf6e3; border-left: 3px solid #c9a227; padding: 10px 14px; border-radius: 0 4px 4px 0; margin-bottom: 18px; }
-    .lock-flag.lock-bad { background: #fdeaea; border-left-color: var(--error-color); }
-    .lock-flag ul { margin: 6px 0 0 18px; }
+    .lock-filters { display: flex; flex-wrap: wrap; gap: var(--s); align-items: center; margin-bottom: var(--l); }
+    .lock-filters .lock-grow { flex: 1 1 16em; }
+    .lock-stack > * + * { margin-top: var(--m); }
+    .lock-row { display: flex; flex-wrap: wrap; gap: var(--s); align-items: center; }
+    .lock-mt { margin-top: var(--l); }
+    .lock-mt-s { margin-top: var(--s); }
+    .lock-capped { margin-top: var(--s); }
+    .lock-inline-form { display: inline; }
+    .lock-pane { margin-bottom: var(--m); }
+    .lock-pane h2 { margin: 0; }
+    .lock-pane .lock-meta { margin: var(--xs) 0 0; }
+    .lock-pane .lock-preview-output { margin-top: var(--m); }
+    .lock-tags { margin-inline-start: var(--s); font-weight: normal; font-size: 13px; }
+    .note ul { margin-block: var(--xs) 0; margin-inline-start: var(--l); list-style: disc; }
 </style>

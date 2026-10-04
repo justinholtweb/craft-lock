@@ -60,17 +60,25 @@ class RequestsController extends Controller
 
     /**
      * Sends deadline reminders and expires unconfirmed requests. Run this daily.
+     *
+     * The reminders are Pro; expiring dead verification links is housekeeping and runs on both
+     * editions. On Lite the command says the reminders were skipped rather than reporting
+     * "0 sent", which would read as "nothing was due".
      */
     public function actionDeadlines(): int
     {
         $plugin = Plugin::getInstance();
         $sent = 0;
 
-        foreach ($plugin->requests->dueForReminder() as $request) {
-            if ($plugin->notifications->sendReminder($request)) {
-                $sent++;
-                $this->stdout("Reminded: $request->reference ({$request->daysRemaining()} days left)\n", Console::FG_YELLOW);
+        if ($plugin->isPro()) {
+            foreach ($plugin->requests->dueForReminder() as $request) {
+                if ($plugin->notifications->sendReminder($request)) {
+                    $sent++;
+                    $this->stdout("Reminded: {$request->reference} ({$request->daysRemaining()} days left)\n", Console::FG_YELLOW);
+                }
             }
+        } else {
+            $this->stdout("Deadline reminders are a Pro feature, so none were sent.\n", Console::FG_GREY);
         }
 
         $expired = $plugin->requests->expireUnverified();

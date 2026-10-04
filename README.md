@@ -101,7 +101,9 @@ request they already made with their reference and their address.
 ```
 
 Submitting creates a row and emails **the address that was typed**. Nothing is disclosed and
-nothing is deleted until somebody follows that link — because an unverified erasure request is a
+nothing is deleted until somebody follows that link and presses the button on the page it opens.
+Opening the link changes nothing, because corporate mail scanners open every link in every message;
+only the button confirms. That step exists because an unverified erasure request is a
 way to delete somebody else's account by typing their address into a form. The person whose
 address it is finds out either way, which is the point.
 
@@ -196,6 +198,10 @@ somebody writes in and asks what you hold on them.
 It answers **false** for an address nobody has ever recorded a decision for. Silence is not
 consent; Article 4(11) is explicit about that.
 
+The front-end preferences form records a grant only for somebody who is signed in, and only
+against their own account's address. A signed-out visitor can withdraw but never grant, because
+a grant anyone can type in for anyone else is not evidence of anything.
+
 Withdrawal is a new row, never an update. Overwriting would leave a ledger that cannot answer
 "were you allowed to email them in March", which is exactly the question that gets asked.
 
@@ -257,6 +263,22 @@ anonymise, erase, the consent ledger, the activity ledger, legal holds, the supp
 register and its report, and deadline reminders. A site on Lite can comply; it does the repeating
 parts by hand.
 
+Lite is free and it is not a trial. Pro is $149 with a $119/year renewal.
+
+| | Lite | Pro |
+| --- | --- | --- |
+| Price | **Free** | **$149** one-off, $119/year renewal |
+| Request intake, verification, status lookup | ✓ | ✓ |
+| The dossier, across all fourteen sources | ✓ | ✓ |
+| Export, anonymise, erase | ✓ | ✓ |
+| The consent ledger | ✓ | ✓ |
+| The activity ledger | ✓ | ✓ |
+| Legal holds and the suppression list | ✓ | ✓ |
+| Retention rules and their scheduling | — | ✓ |
+| The Article 30 register and its report | — | ✓ |
+| Deadline reminders | — | ✓ |
+
+
 ## Command line
 
 ```
@@ -264,7 +286,7 @@ lock/requests/list         open requests, soonest deadline first
 lock/requests/deadlines    send reminders, expire unconfirmed requests   ← cron, daily
 lock/requests/tidy         delete expired dossiers, trim the ledger
 lock/erase/preview         what would happen to this person, and why
-lock/erase/run             carry it out (needs --force)
+lock/erase/run             carry it out (needs --force and the preview's --fingerprint)
 lock/erase/assemble        build a dossier from the shell
 lock/erase/check           has this address been erased?
 lock/retention/due         run every rule that is owed a run             ← cron, daily

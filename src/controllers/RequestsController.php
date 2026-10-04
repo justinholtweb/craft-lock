@@ -6,9 +6,7 @@ use Craft;
 use craft\helpers\StringHelper;
 use craft\helpers\UrlHelper;
 use craft\web\Controller;
-use DateTime;
 use justinholtweb\lock\models\Request;
-use justinholtweb\lock\models\Settings;
 use justinholtweb\lock\Plugin;
 use justinholtweb\lock\records\RequestEventRecord;
 use yii\web\NotFoundHttpException;
@@ -23,6 +21,17 @@ use yii\web\Response;
  */
 class RequestsController extends Controller
 {
+    public function beforeAction($action): bool
+    {
+        if (!parent::beforeAction($action)) {
+            return false;
+        }
+
+        $this->requireCpRequest();
+
+        return true;
+    }
+
     public function actionIndex(): Response
     {
         $this->requirePermission(Plugin::PERMISSION_VIEW);
@@ -133,32 +142,12 @@ class RequestsController extends Controller
         $this->requirePermission(Plugin::PERMISSION_MANAGE);
 
         $request = $this->requestFromBody();
-        $plugin = Plugin::getInstance();
 
-        /** @var Settings $settings */
-        $settings = $plugin->getSettings();
-
-        $dossier = $plugin->dossiers->assemble($request->getSubject(), $request->id);
-        $password = $settings->protectDossier ? $plugin->dossiers->generatePassword() : null;
-        $filename = $plugin->dossiers->export($dossier, $password);
-
-        $request->dossierPath = $filename;
-        $request->dossierBuiltAt = new DateTime();
-
-        if ($request->status === Request::STATUS_OPEN) {
-            $request->status = Request::STATUS_ASSEMBLED;
+        if ($refusal = $this->unverifiedRefusal($request)) {
+            return $refusal;
         }
 
-        $plugin->requests->save($request);
-        $plugin->requests->addEvent(
-            $request,
-            RequestEventRecord::TYPE_ASSEMBLED,
-            Craft::t('lock', '{n} records assembled from {sources} sources.', [
-                'n' => $dossier->count(),
-                'sources' => count($dossier->populatedBundles()),
-            ]),
-            ['partial' => $dossier->isPartial(), 'problems' => $dossier->problems()],
-        );
+        [$dossier, $password] = Plugin::getInstance()->requests->assemble($request);
 
         Craft::$app->getSession()->setNotice($password !== null
             ? Craft::t('lock', 'Assembled. The archive password is {password} — it is shown once and is not stored.', ['password' => $password])
@@ -169,6 +158,23 @@ class RequestsController extends Controller
         }
 
         return $this->redirectToPostedUrl();
+    }
+
+    /**
+     * Nothing is assembled or erased for a request nobody has confirmed.
+     *
+     * An unverified request is a form somebody filled in with an address. Assembling for it sends
+     * the address's data towards whoever typed it; erasing for it deletes a stranger's account on
+     * the say-so of a text box. Staff who have satisfied themselves another way take the request
+     * through the control panel, which counts as verified.
+     */
+    private function unverifiedRefusal(Request $request): ?Response
+    {
+        if ($request->isActionable()) {
+            return null;
+        }
+
+        return $this->asFailure(Craft::t('lock', 'This request has not been confirmed by the person who made it. Nothing can be assembled or erased until it is.'));
     }
 
     /** Staff download of a built dossier. Logged, because reading it all is itself processing. */
@@ -196,9 +202,14 @@ class RequestsController extends Controller
     /** The erasure preview. Nothing is changed; the plan is returned for the operator to approve. */
     public function actionPlan(): Response
     {
+        $this->requirePostRequest();
         $this->requirePermission(Plugin::PERMISSION_ERASE);
 
         $request = $this->requestFromBody();
+
+        if ($refusal = $this->unverifiedRefusal($request)) {
+            return $refusal;
+        }
         $mode = (string)$this->request->getParam('mode', '');
 
         $plan = Plugin::getInstance()->erasure->plan(
@@ -234,7 +245,17 @@ class RequestsController extends Controller
 
         $request = $this->requestFromBody();
         $mode = (string)$this->request->getBodyParam('mode', '');
-        $fingerprint = (string)$this->request->getBodyParam('fingerprint', '');
+        $fingerprint = trim((string)$this->request->getBodyParam('fingerprint', ''));
+
+        if ($refusal = $this->unverifiedRefusal($request)) {
+            return $refusal;
+        }
+
+        // No fingerprint, no erasure. An empty one is not "skip the check" — it is a form that
+        // never showed the operator a preview, and the preview is the approval.
+        if ($fingerprint === '') {
+            return $this->asFailure(Craft::t('lock', 'Preview the erasure first. It only runs against a plan somebody has looked at.'));
+        }
 
         $plan = Plugin::getInstance()->erasure->plan($request->getSubject(), $mode !== '' ? $mode : null, $request->id);
 
@@ -243,7 +264,7 @@ class RequestsController extends Controller
         }
 
         try {
-            $outcome = Plugin::getInstance()->erasure->run($plan, false, $fingerprint !== '' ? $fingerprint : null);
+            $outcome = Plugin::getInstance()->erasure->run($plan, false, $fingerprint);
         } catch (\yii\base\InvalidArgumentException $e) {
             return $this->asFailure($e->getMessage());
         }
@@ -319,7 +340,7 @@ class RequestsController extends Controller
     public function actionDelete(): ?Response
     {
         $this->requirePostRequest();
-        $this->requireAdmin();
+        $this->requireAdmin(false);
 
         $id = (int)$this->request->getBodyParam('requestId');
         Plugin::getInstance()->requests->delete($id);

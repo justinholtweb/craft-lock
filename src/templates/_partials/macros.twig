@@ -1,0 +1,119 @@
+{# Small, shared pieces of markup. Kept here so that a status reads the same on every screen: a
+   request that is "open" on the list and "live" on the detail page is two plugins, not one. #}
+
+{# A Craft status dot with its label. `status` is one of Craft's own classes — on, off, pending,
+   disabled — so the colour means what it means everywhere else in the control panel. #}
+{% macro status(status, label) -%}
+    <span class="status-item"><span class="status {{ status }}" aria-hidden="true"></span><span>{{ label }}</span></span>
+{%- endmacro %}
+
+{# The muted word an empty cell shows instead of a bare dash. #}
+{% macro none(label) -%}
+    <span class="light">{{ label ?? 'None'|t('lock') }}</span>
+{%- endmacro %}
+
+{% macro requestStatus(request) -%}
+    {%- set dot = {
+        unverified: 'pending',
+        open: 'on',
+        assembled: 'on',
+        awaiting: 'on',
+    }[request.status] ?? 'disabled' -%}
+    {{ _self.status(dot, request.statusLabel()) }}
+{%- endmacro %}
+
+{% macro requestSource(source) -%}
+    {{- {
+        web: 'Website form'|t('lock'),
+        cp: 'Control panel'|t('lock'),
+        email: 'Email'|t('lock'),
+        console: 'Console'|t('lock'),
+    }[source] ?? source -}}
+{%- endmacro %}
+
+{% macro consentState(entry) -%}
+    {%- set dot = {granted: 'on', withdrawn: 'off'}[entry.state] ?? 'disabled' -%}
+    {{ _self.status(dot, entry.stateLabel()) }}
+{%- endmacro %}
+
+{% macro consentSource(source) -%}
+    {{- {
+        banner: 'Cookie banner'|t('lock'),
+        form: 'Form'|t('lock'),
+        registration: 'Registration'|t('lock'),
+        checkout: 'Checkout'|t('lock'),
+        import: 'Import'|t('lock'),
+        cp: 'Control panel'|t('lock'),
+        api: 'API'|t('lock'),
+        toss: 'Toss'|t('lock'),
+    }[source] ?? source -}}
+{%- endmacro %}
+
+{% macro runStatus(status) -%}
+    {%- set labels = {
+        pending: 'Pending'|t('lock'),
+        running: 'Running'|t('lock'),
+        done: 'Done'|t('lock'),
+        failed: 'Failed'|t('lock'),
+        blocked: 'Blocked'|t('lock'),
+    } -%}
+    {%- set dot = {done: 'on', failed: 'off'}[status] ?? 'pending' -%}
+    {{ _self.status(dot, labels[status] ?? status) }}
+{%- endmacro %}
+
+{% macro runType(type) -%}
+    {{- {
+        erasure: 'Erasure'|t('lock'),
+        retention: 'Retention'|t('lock'),
+        dossier: 'Disclosure'|t('lock'),
+    }[type] ?? type -}}
+{%- endmacro %}
+
+{% macro eventType(type) -%}
+    {{- {
+        received: 'Received'|t('lock'),
+        verified: 'Identity confirmed'|t('lock'),
+        assigned: 'Assigned'|t('lock'),
+        note: 'Note'|t('lock'),
+        assembled: 'Assembled'|t('lock'),
+        exported: 'Exported'|t('lock'),
+        downloaded: 'Downloaded'|t('lock'),
+        erased: 'Anonymised or erased'|t('lock'),
+        extended: 'Extended'|t('lock'),
+        emailed: 'Emailed'|t('lock'),
+        closed: 'Closed'|t('lock'),
+        reopened: 'Reopened'|t('lock'),
+    }[type] ?? type -}}
+{%- endmacro %}
+
+{% macro activityCategory(category) -%}
+    {{- {
+        request: 'Requests'|t('lock'),
+        access: 'Access'|t('lock'),
+        erasure: 'Erasure'|t('lock'),
+        consent: 'Consent'|t('lock'),
+        retention: 'Retention'|t('lock'),
+        admin: 'Administration'|t('lock'),
+    }[category] ?? category -}}
+{%- endmacro %}
+
+{# Who a ledger row or a run is about, without the address. The ledger stores only a keyed hash;
+   the record's subjectLabel is the request reference where there is one, and a '#hash' prefix
+   otherwise, which is enough to tell two rows apart and not enough to say whose they are. #}
+{% macro subject(row) -%}
+    {%- set label = row.subjectLabel ?? null -%}
+    {%- if label and (row.requestId ?? false) -%}
+        <a href="{{ url('lock/requests/' ~ row.requestId) }}"><code>{{ label }}</code></a>
+    {%- elseif label -%}
+        <code class="light" title="{{ 'A keyed hash of the address, not the address itself.'|t('lock') }}">{{ label }}</code>
+    {%- else -%}
+        {{ _self.none() }}
+    {%- endif -%}
+{%- endmacro %}
+
+{# Shown under a list that stopped at its cap, so a short list is never mistaken for a complete one. #}
+{% macro capped(items, cap) -%}
+    {%- if items|length >= cap -%}
+        <p class="light lock-capped">{{ 'Showing the newest {n}. Older entries are not listed here.'|t('lock', {n: cap}) }}</p>
+    {%- endif -%}
+{%- endmacro %}

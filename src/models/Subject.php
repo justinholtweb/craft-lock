@@ -5,6 +5,7 @@ namespace justinholtweb\lock\models;
 use Craft;
 use craft\base\Model;
 use craft\elements\User;
+use craft\helpers\Db;
 
 /**
  * A person, as far as this site is concerned.
@@ -66,7 +67,14 @@ class Subject extends Model
             return null;
         }
 
-        return Craft::$app->getUsers()->getUserByUsernameOrEmail($this->normalisedEmail());
+        // By email only. `getUserByUsernameOrEmail()` would also match a *username* equal to the
+        // address typed — so a person who registered the username "ada@example.com" would be
+        // handed somebody else's subject request, and erased for it.
+        // Escaped, because a query param treats `*`, `,` and a leading `not ` as syntax.
+        return User::find()
+            ->email(Db::escapeParam($this->normalisedEmail()))
+            ->status(null)
+            ->one();
     }
 
     /** Fills in whichever of the two identifiers was missing. */

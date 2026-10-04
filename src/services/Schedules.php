@@ -7,7 +7,7 @@ use craft\base\Component;
 use DateTime;
 use justinholtweb\lock\models\Settings;
 use justinholtweb\lock\Plugin;
-use justinholtweb\lock\queue\RetentionJob;
+use justinholtweb\lock\queue\ApplyRetentionRules;
 
 /**
  * Firing the scheduled work on a site with no cron.
@@ -31,7 +31,7 @@ class Schedules extends Component
         /** @var Settings $settings */
         $settings = Plugin::getInstance()->getSettings();
 
-        if (!$settings->scheduleEnabled) {
+        if (!$settings->scheduleEnabled || !Plugin::getInstance()->isPro()) {
             return false;
         }
 
@@ -55,7 +55,7 @@ class Schedules extends Component
             return false;
         }
 
-        Craft::$app->getQueue()->push(new RetentionJob(['ruleKeys' => $due]));
+        Craft::$app->getQueue()->push(new ApplyRetentionRules(['ruleKeys' => $due]));
 
         return true;
     }

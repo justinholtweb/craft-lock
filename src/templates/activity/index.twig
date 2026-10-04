@@ -1,55 +1,66 @@
 {% extends "_layouts/cp" %}
 {% import "_includes/forms" as forms %}
+{% import "lock/_partials/macros" as lock %}
 
 {% set title = "Activity"|t('lock') %}
 {% set selectedSubnavItem = 'activity' %}
 
+{# Read-only by design: no edit, delete or tidy-up controls belong on this screen. The only control
+   is the category filter, which changes what is shown and nothing else. #}
 {% block content %}
     {% include "lock/_partials/style" %}
 
     <p class="light">
-        {{ "Every time somebody’s data was read, exported, anonymised, deleted, or had a consent decision recorded — and every time the rules themselves changed. Article 5(2) calls it accountability. There is no edit button on this screen, and that is the point."|t('lock') }}
+        {{ "Every time somebody’s data was read, exported, anonymised, deleted, or had a consent decision recorded, and every time the rules themselves changed. Article 5(2) calls it accountability. There is no edit button on this screen, and that is the point."|t('lock') }}
     </p>
 
     <div class="lock-grid">
         {% for key, label in categories %}
             <div class="lock-stat">
-                <h4>{{ label }}</h4>
+                <h2 class="lock-stat-heading">{{ label }}</h2>
                 <div class="lock-figure">{{ tally[key] ?? 0 }}</div>
                 <span class="light">{{ "last 30 days"|t('lock') }}</span>
             </div>
         {% endfor %}
     </div>
 
-    <form method="get" action="{{ url('lock/activity') }}" style="margin-bottom:18px;">
-        {{ forms.select({name: 'category', value: category, options: [{label: "Everything"|t('lock'), value: ''}]|merge(categories|keys|map(k => {label: categories[k], value: k}))}) }}
+    <form method="get" action="{{ url('lock/activity') }}" class="lock-filters" role="search">
+        {{ forms.select({
+            name: 'category',
+            value: category,
+            options: [{label: "Everything"|t('lock'), value: ''}]|merge(categories|keys|map(k => {label: categories[k], value: k})),
+            inputAttributes: {aria: {label: 'Category'|t('lock')}},
+        }) }}
         <button type="submit" class="btn">{{ "Filter"|t('lock') }}</button>
     </form>
 
-    <table class="data fullwidth">
-        <thead>
-            <tr>
-                <th>{{ "When"|t('lock') }}</th>
-                <th>{{ "Category"|t('lock') }}</th>
-                <th>{{ "What"|t('lock') }}</th>
-                <th>{{ "Subject"|t('lock') }}</th>
-                <th>{{ "By"|t('lock') }}</th>
-                <th>{{ "From"|t('lock') }}</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for entry in entries %}
+    {% if entries|length %}
+        <table class="data fullwidth">
+            <thead>
                 <tr>
-                    <td class="thin">{{ entry.dateCreated|datetime('short') }}</td>
-                    <td class="thin"><code>{{ entry.category }}</code></td>
-                    <td>{{ entry.summary ?? entry.action }}<br><span class="light"><code>{{ entry.action }}</code></span></td>
-                    <td class="light">{{ entry.subjectEmail ?? '—' }}</td>
-                    <td class="light">{{ entry.user.username ?? "system"|t('lock') }}</td>
-                    <td class="light">{{ entry.ip ?? 'console' }}</td>
+                    <th scope="col">{{ "When"|t('lock') }}</th>
+                    <th scope="col">{{ "Category"|t('lock') }}</th>
+                    <th scope="col">{{ "What"|t('lock') }}</th>
+                    <th scope="col">{{ "Subject"|t('lock') }}</th>
+                    <th scope="col">{{ "By"|t('lock') }}</th>
+                    <th scope="col">{{ "From"|t('lock') }}</th>
                 </tr>
-            {% else %}
-                <tr><td colspan="6" class="light">{{ "Nothing yet."|t('lock') }}</td></tr>
-            {% endfor %}
-        </tbody>
-    </table>
+            </thead>
+            <tbody>
+                {% for entry in entries %}
+                    <tr>
+                        <td class="thin">{{ entry.dateCreated|datetime('short') }}</td>
+                        <td class="thin">{{ categories[entry.category] ?? lock.activityCategory(entry.category) }}</td>
+                        <td>{{ entry.summary ?? entry.action }}<br><span class="light"><code>{{ entry.action }}</code></span></td>
+                        <td>{{ lock.subject(entry) }}</td>
+                        <td class="light">{{ entry.user.username ?? "system"|t('lock') }}</td>
+                        <td class="light">{{ entry.ip ?? "console"|t('lock') }}</td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {{ lock.capped(entries, 300) }}
+    {% else %}
+        <p class="zilch small">{{ "Nothing yet."|t('lock') }}</p>
+    {% endif %}
 {% endblock %}

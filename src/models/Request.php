@@ -134,6 +134,17 @@ class Request extends Model
         return self::types()[$this->type] ?? $this->type;
     }
 
+    public function sourceLabel(): string
+    {
+        return match ($this->source) {
+            self::SOURCE_WEB => Craft::t('lock', 'Website form'),
+            self::SOURCE_CP => Craft::t('lock', 'Control panel'),
+            self::SOURCE_EMAIL => Craft::t('lock', 'Email'),
+            self::SOURCE_CONSOLE => Craft::t('lock', 'Console'),
+            default => $this->source,
+        };
+    }
+
     public function statusLabel(): string
     {
         return self::statuses()[$this->status] ?? $this->status;
@@ -157,6 +168,18 @@ class Request extends Model
     public function isVerified(): bool
     {
         return $this->verifiedAt !== null;
+    }
+
+    /**
+     * Whether anything may be assembled or erased for this request yet.
+     *
+     * Not until the person who made it has confirmed it — or staff took it in through the control
+     * panel, which counts as confirmation. Before that it is a form somebody filled in with an
+     * address, and acting on it would send that address's data towards whoever typed it.
+     */
+    public function isActionable(): bool
+    {
+        return $this->isVerified() && !in_array($this->status, [self::STATUS_UNVERIFIED, self::STATUS_EXPIRED], true);
     }
 
     public function wasExtended(): bool

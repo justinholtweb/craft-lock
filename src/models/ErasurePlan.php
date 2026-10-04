@@ -4,6 +4,7 @@ namespace justinholtweb\lock\models;
 
 use craft\base\Model;
 use DateTime;
+use justinholtweb\lock\helpers\Address;
 
 /**
  * What is about to happen to a subject's data, decided in full before anything happens.
@@ -98,28 +99,44 @@ class ErasurePlan extends Model
         return $grouped;
     }
 
+    /**
+     * The plan as it is kept in the run ledger.
+     *
+     * Deliberately thinner than the plan on screen: the subject is the keyed hash, and each target
+     * keeps only what it was (source and key), what was decided (action) and why. Labels and field
+     * names are dropped because they are built from the data itself — "Order #1042 for
+     * ada@example.com" — and the run that erased a person must not be the row that remembers them.
+     * The fingerprint is unaffected; it never read the labels.
+     */
     public function toArray(array $fields = [], array $expand = [], $recursive = true): array
     {
+        $email = $this->subject->normalisedEmail();
+
         return [
-            'subject' => $this->subject->normalisedEmail(),
+            'subjectHash' => $email !== '' ? $this->subject->emailHash() : null,
             'mode' => $this->mode,
             'fingerprint' => $this->fingerprint(),
             'blocked' => $this->blocked,
-            'blockReason' => $this->blockReason,
-            'errors' => $this->errors,
+            'blockReason' => $this->scrub($this->blockReason),
+            'errors' => array_map(fn(string $error) => (string)$this->scrub($error), $this->errors),
             'counts' => [
                 'erase' => $this->countBy(ErasureTarget::ACTION_ERASE),
                 'anonymise' => $this->countBy(ErasureTarget::ACTION_ANONYMISE),
                 'skip' => $this->countBy(ErasureTarget::ACTION_SKIP),
             ],
-            'targets' => array_map(static fn(ErasureTarget $t) => [
+            'targets' => array_map(fn(ErasureTarget $t) => [
                 'source' => $t->source,
                 'key' => $t->key,
-                'label' => $t->label,
                 'action' => $t->action,
-                'reason' => $t->reason,
-                'fields' => $t->fields,
+                'reason' => $this->scrub($t->reason),
             ], $this->targets),
         ];
+    }
+
+    private function scrub(?string $text): ?string
+    {
+        $email = $this->subject->normalisedEmail();
+
+        return $text !== null && $email !== '' ? Address::replace($text, $email, '[address]') : $text;
     }
 }

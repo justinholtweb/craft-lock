@@ -29,6 +29,7 @@ use craft\fields\PlainText;
 use craft\helpers\Db;
 use justinholtweb\lock\collectors\BaseCollector;
 use justinholtweb\lock\collectors\CollectorInterface;
+use justinholtweb\lock\helpers\Address;
 use justinholtweb\lock\helpers\Cadence;
 use justinholtweb\lock\helpers\ContentScan;
 use justinholtweb\lock\helpers\Readable;
@@ -214,13 +215,17 @@ check('the hash is keyed, not a bare sha256 of the address', function() use ($su
 section('Fixtures');
 
 /** Removes anything this script has ever created, so a failed run does not poison the next. */
-$teardown = function() use (&$fixtureEntryId) {
+$teardown = function() use (&$fixtureEntryId, &$decoyEntryId) {
     foreach (User::find()->email('*@' . DOMAIN)->status(null)->limit(null)->all() as $user) {
         Craft::$app->getElements()->deleteElement($user, true);
     }
 
-    if ($fixtureEntryId !== null) {
-        $entry = Craft::$app->getElements()->getElementById($fixtureEntryId, Entry::class);
+    foreach ([$fixtureEntryId, $decoyEntryId] as $entryId) {
+        if ($entryId === null) {
+            continue;
+        }
+
+        $entry = Craft::$app->getElements()->getElementById($entryId, Entry::class);
 
         if ($entry !== null) {
             Craft::$app->getElements()->deleteElement($entry, true);
@@ -232,21 +237,31 @@ $teardown = function() use (&$fixtureEntryId) {
     $db->createCommand()->delete(ConsentRecord::tableName(), $like)->execute();
     $db->createCommand()->delete(RequestRecord::tableName(), $like)->execute();
     $db->createCommand()->delete(HoldRecord::tableName(), $like)->execute();
-    $db->createCommand()->delete(ActivityRecord::tableName(), ['like', 'subjectEmail', '%@' . DOMAIN, false])->execute();
-    $db->createCommand()->delete(RunRecord::tableName(), ['like', 'subjectEmail', '%@' . DOMAIN, false])->execute();
     $db->createCommand()->delete(ProcessingRecord::tableName(), ['like', 'name', 'Lock check%', false])->execute();
 
-    foreach ([
-        (new Subject(email: 'ada@' . DOMAIN))->emailHash(),
-        (new Subject(email: 'grace@' . DOMAIN))->emailHash(),
-    ] as $hash) {
+    // Runs of the rules these checks define. The dry-run-first guard counts dry runs, so a run
+    // left over from last time would make "the first run is forced dry" false on the next.
+    $db->createCommand()->delete(RunRecord::tableName(), ['ruleKey' => 'lock-check-firstrun'])->execute();
+
+    $domain = Plugin::getInstance()->getSettings()->anonymousDomain ?: 'anonymised.invalid';
+
+    foreach (['ada', 'grace', 'smoke', 'lex', 'alex'] as $name) {
+        $person = new Subject(email: $name . '@' . DOMAIN);
+        $hash = $person->emailHash();
+
+        // Requests that were anonymised by an erasure no longer carry the fixture domain, only
+        // the pseudonym — so they are found by that.
+        $db->createCommand()->delete(RequestRecord::tableName(), ['email' => $person->pseudonym() . '@' . $domain])->execute();
         $db->createCommand()->delete(ErasureRecord::tableName(), ['emailHash' => $hash])->execute();
         $db->createCommand()->delete(ConsentRecord::tableName(), ['emailHash' => $hash])->execute();
         $db->createCommand()->delete(ActivityRecord::tableName(), ['subjectHash' => $hash])->execute();
+        $db->createCommand()->delete(RunRecord::tableName(), ['subjectHash' => $hash])->execute();
+        Plugin::getInstance()->dossiers->deleteFor($person);
     }
 };
 
 $fixtureEntryId = null;
+$decoyEntryId = null;
 $teardown();
 
 $subjectUser = new User();
@@ -311,7 +326,55 @@ if ($contentTarget !== null) {
     check('an address nobody used finds nothing', function() {
         return ContentScan::matchingIds(Entry::class, 'nobody-at-all@' . DOMAIN) === [];
     });
+
+    // The decoy: `alex@…` contains `lex@…` as a substring. A `LIKE` or `stripos` finds it; the
+    // bounded match must not, and an anonymisation of Lex must leave Alex's address alone.
+    $decoy = new Entry();
+    $decoy->sectionId = $contentTarget['section']->id;
+    $decoy->typeId = $contentTarget['type']->id;
+    $decoy->title = 'Lock check — decoy';
+    $decoy->setFieldValue($contentTarget['field'], 'Write to alex@' . DOMAIN . ' about the delivery.');
+
+    check('a decoy entry for a longer address can be created', function() use ($decoy, &$decoyEntryId) {
+        $saved = Craft::$app->getElements()->saveElement($decoy);
+        $decoyEntryId = $decoy->id;
+
+        return $saved ?: 'save failed: ' . json_encode($decoy->getErrors());
+    });
+
+    check('an address is not found inside a longer one', function() use (&$decoyEntryId) {
+        $lex = 'lex@' . DOMAIN;
+
+        return !in_array($decoyEntryId, ContentScan::matchingIds(Entry::class, $lex), true)
+            && in_array($decoyEntryId, ContentScan::matchingIds(Entry::class, 'alex@' . DOMAIN), true)
+            ?: 'the decoy was matched for ' . $lex;
+    });
+
+    check('anonymising an address leaves a longer one that contains it untouched', function() use (&$decoyEntryId, $contentTarget) {
+        $entry = Craft::$app->getElements()->getElementById($decoyEntryId, Entry::class);
+        $changed = ContentScan::replace($entry, 'lex@' . DOMAIN, 'anon-x@anonymised.invalid');
+        $value = (string)Craft::$app->getElements()->getElementById($decoyEntryId, Entry::class)->getFieldValue($contentTarget['field']);
+
+        return !$changed && str_contains($value, 'alex@' . DOMAIN) ?: "decoy now reads: $value";
+    });
+
+    check('the entry collector does not disclose the decoy to the shorter address', function() use (&$decoyEntryId) {
+        $bundle = Plugin::getInstance()->collectors->get('entry')->collect(new Subject(email: 'lex@' . DOMAIN));
+
+        foreach ($bundle->records as $record) {
+            if ($record->key === "content:$decoyEntryId") {
+                return 'the decoy was disclosed';
+            }
+        }
+
+        return true;
+    });
 }
+
+check('a log line about a longer address is not disclosed to a shorter one', function() {
+    return !Address::contains('2026-10-03 [info] mail sent to alex@' . DOMAIN, 'lex@' . DOMAIN)
+        && Address::contains('2026-10-03 [info] mail sent to lex@' . DOMAIN . '.', 'lex@' . DOMAIN);
+});
 
 check('a URL needle is searched in its JSON-escaped form as well as raw', function() {
     // Craft stores `https://x` as `https:\/\/x`, so a raw-only LIKE misses exactly the values
@@ -1021,11 +1084,22 @@ check('a held subject is skipped by a sweep that would otherwise touch them', fu
 });
 
 check("a rule's first real run is forced to report instead", function() {
-    configure(['retentionRules' => [['key' => 'firstrun', 'label' => 'Idle sessions', 'scope' => 'session:stale', 'period' => 3650, 'unit' => 'days', 'mode' => 'erase', 'enabled' => '1']], 'retentionDryRunFirst' => true]);
-    $outcome = Plugin::getInstance()->retention->run(Plugin::getInstance()->retention->rule('firstrun'), false);
+    configure(['retentionRules' => [['key' => 'lock-check-firstrun', 'label' => 'Idle sessions', 'scope' => 'session:stale', 'period' => 3650, 'unit' => 'days', 'mode' => 'erase', 'enabled' => '1']], 'retentionDryRunFirst' => true]);
+    $outcome = Plugin::getInstance()->retention->run(Plugin::getInstance()->retention->rule('lock-check-firstrun'), false);
     configure([]);
 
     return $outcome->dryRun;
+});
+
+check('only the first: the second run of the same rule is real', function() {
+    // The guard used to count only real runs, so the dry run it forced never counted and every
+    // run after it was forced dry as well — a rule that could never delete anything. A ten-year
+    // period over stale sessions keeps this real run harmless.
+    configure(['retentionRules' => [['key' => 'lock-check-firstrun', 'label' => 'Idle sessions', 'scope' => 'session:stale', 'period' => 3650, 'unit' => 'days', 'mode' => 'erase', 'enabled' => '1']], 'retentionDryRunFirst' => true]);
+    $outcome = Plugin::getInstance()->retention->run(Plugin::getInstance()->retention->rule('lock-check-firstrun'), false);
+    configure([]);
+
+    return !$outcome->dryRun ?: 'the second run was forced to a dry run too';
 });
 
 check('scopes with no rule pointed at them are listed as uncovered', function() {
@@ -1096,8 +1170,70 @@ check('a dry run leaves no erasure certificate behind', function() use ($subject
     return !ErasureRecord::find()->where(['emailHash' => $subject->emailHash()])->exists();
 });
 
+check('the console refuses --force without the fingerprint preview printed', function() use ($subjectEmail) {
+    $code = Craft::$app->runAction('lock/erase/run', ['email' => $subjectEmail, 'force' => 1]);
+
+    return $code === yii\console\ExitCode::USAGE
+        && User::find()->email($subjectEmail)->status(null)->exists()
+        ?: "exit code $code";
+});
+
+check('the console refuses a fingerprint that does not match the plan', function() use ($subjectEmail) {
+    $code = Craft::$app->runAction('lock/erase/run', ['email' => $subjectEmail, 'force' => 1, 'fingerprint' => str_repeat('0', 64)]);
+
+    return $code === yii\console\ExitCode::DATAERR
+        && User::find()->email($subjectEmail)->status(null)->exists()
+        ?: "exit code $code";
+});
+
+// The real erasure is run the way the desk runs it: for a confirmed erasure request, with a
+// dossier assembled for it first, and closed afterwards — so that the checks below can look for
+// the address in every place that path writes to.
+$erasureRequest = new Request();
+$erasureRequest->email = $subjectEmail;
+$erasureRequest->name = 'Ada Lovelace';
+$erasureRequest->type = Request::TYPE_ERASURE;
+$erasureRequest->message = "Please delete everything you hold for $subjectEmail.";
+$erasureRequest->source = Request::SOURCE_CP;
+
+check('an erasure request can be taken and assembled', function() use ($erasureRequest) {
+    configure(['notifySubject' => false, 'notifyStaff' => false, 'protectDossier' => false]);
+
+    if (!Plugin::getInstance()->requests->create($erasureRequest, false, true)) {
+        return 'create failed';
+    }
+
+    [, , $filename] = Plugin::getInstance()->requests->assemble($erasureRequest);
+
+    // Named by a prefix of the keyed hash, never by the address.
+    return is_file(Plugin::getInstance()->dossiers->pathFor($filename))
+        && !str_contains($filename, 'lock-test')
+        ?: "archive: $filename";
+});
+
+check('an unconfirmed request cannot be assembled', function() {
+    $unconfirmed = new Request();
+    $unconfirmed->email = 'grace@' . DOMAIN;
+    $unconfirmed->type = Request::TYPE_ERASURE;
+    Plugin::getInstance()->requests->create($unconfirmed, false);
+
+    try {
+        Plugin::getInstance()->requests->assemble($unconfirmed);
+
+        return 'it assembled';
+    } catch (yii\base\InvalidCallException) {
+        return $unconfirmed->dossierPath === null;
+    }
+});
+
+check('an unconfirmed request does not hold anybody\'s data', function() {
+    // Grace has the unconfirmed request just made. Anybody can type an address into the form;
+    // that must not be enough to stop retention touching that person.
+    return Plugin::getInstance()->holds->blockFor(new Subject(email: 'grace@' . DOMAIN)) === null;
+});
+
 $liveSubject = (new Subject(email: $subjectEmail))->resolve();
-$livePlan = $plugin->erasure->plan($liveSubject, Settings::MODE_ANONYMISE);
+$livePlan = $plugin->erasure->plan($liveSubject, Settings::MODE_ANONYMISE, $erasureRequest->id);
 $liveOutcome = $plugin->erasure->run($livePlan, false, $livePlan->fingerprint());
 
 check('the run reports what the plan promised', function() use ($livePlan, $liveOutcome) {
@@ -1184,9 +1320,73 @@ check("the consent record survives with its proof, minus the person's address", 
         if ($row['email'] === $subjectEmail) {
             return 'a consent record still holds the address';
         }
+
+        $evidence = is_string($row['evidence']) ? json_decode($row['evidence'], true) : $row['evidence'];
+
+        if (is_array($evidence) && (($evidence['ip'] ?? null) !== null || ($evidence['userAgent'] ?? null) !== null || ($evidence['url'] ?? null) !== null)) {
+            return 'the consent evidence still identifies the person: ' . json_encode($evidence);
+        }
     }
 
     return true;
+});
+
+$erasureDossier = Plugin::getInstance()->requests->getById((int)$erasureRequest->id)?->dossierPath;
+
+check('closing the erasure request anonymises the request itself', function() use ($erasureRequest, $liveSubject) {
+    Plugin::getInstance()->requests->close($erasureRequest, Request::STATUS_COMPLETED, 'Erased.', false);
+    $row = RequestRecord::findOne($erasureRequest->id);
+
+    return $row !== null
+        && $row->email === $liveSubject->pseudonym() . '@anonymised.invalid'
+        && $row->name === null
+        && $row->message === null
+        && $row->context === null
+        && $row->dossierPath === null
+        && $row->reference === $erasureRequest->reference
+        ?: 'row: ' . json_encode($row?->getAttributes(['email', 'name', 'message', 'dossierPath']));
+});
+
+check("and deletes the subject's dossier archive", function() use ($erasureDossier) {
+    return $erasureDossier !== null && !is_file(Plugin::getInstance()->dossiers->pathFor($erasureDossier))
+        ?: 'still on disk: ' . var_export($erasureDossier, true);
+});
+
+check("after an erasure, the address is in none of Lock's own tables", function() use ($subjectEmail) {
+    $db = Craft::$app->getDb();
+    $prefix = $db->tablePrefix;
+    $found = [];
+
+    foreach ($db->getSchema()->getTableNames() as $table) {
+        if (!str_starts_with($table, $prefix . 'lock_')) {
+            continue;
+        }
+
+        foreach ((new Query())->from([$table])->all() as $row) {
+            $flat = json_encode($row, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+
+            if (stripos((string)$flat, $subjectEmail) !== false) {
+                $found[] = "$table #" . ($row['id'] ?? '?');
+            }
+        }
+    }
+
+    return $found === [] ?: 'still there: ' . implode(', ', array_slice($found, 0, 10));
+});
+
+check("and none of Lock's storage", function() use ($subjectEmail) {
+    $root = Craft::$app->getPath()->getStoragePath() . DIRECTORY_SEPARATOR . 'lock';
+    $found = [];
+
+    if (is_dir($root)) {
+        foreach (craft\helpers\FileHelper::findFiles($root) as $file) {
+            if (stripos(basename($file), 'lock-test') !== false || stripos((string)file_get_contents($file), $subjectEmail) !== false) {
+                $found[] = basename($file);
+            }
+        }
+    }
+
+    return $found === [] ?: 'still there: ' . implode(', ', $found);
 });
 
 // ---------------------------------------------------------------------------------------------
@@ -1317,6 +1517,167 @@ check('a ledger write cannot break the operation it records', function() {
     $method = new ReflectionMethod(Plugin::getInstance()->activity, 'log');
 
     return $method->getReturnType()?->getName() === 'void';
+});
+
+// ---------------------------------------------------------------------------------------------
+section('Hardening');
+
+check("the ledgers have no column for an address", function() {
+    $db = Craft::$app->getDb();
+
+    return $db->getTableSchema(ActivityRecord::tableName(), true)->getColumn('subjectEmail') === null
+        && $db->getTableSchema(RunRecord::tableName(), true)->getColumn('subjectEmail') === null;
+});
+
+check("a ledger summary that names the address is stored without it", function() {
+    $hold = new Hold();
+    $hold->email = 'grace@' . DOMAIN;
+    $hold->reason = 'Lock check — logged';
+    Plugin::getInstance()->holds->save($hold);
+
+    // HoldsController no longer names the person in the summary; this is the backstop in
+    // Activity::log for a caller that still does.
+    Plugin::getInstance()->activity->log(ActivityRecord::CATEGORY_ADMIN, 'hold.placed', 'A hold was placed on grace@' . DOMAIN . ': x', new Subject(email: $hold->email));
+    Plugin::getInstance()->holds->delete((int)$hold->id);
+
+    $row = ActivityRecord::find()->where(['action' => 'hold.placed', 'subjectHash' => (new Subject(email: 'grace@' . DOMAIN))->emailHash()])->orderBy(['id' => SORT_DESC])->one();
+
+    return $row !== null && !str_contains((string)$row->summary, 'grace@') ?: 'summary: ' . $row?->summary;
+});
+
+check("Craft's own tables and Lock's are refused as custom tables", function() {
+    foreach (['users', 'elements_sites', 'lock_requests', 'sessions', 'content'] as $table) {
+        $settings = new Settings();
+        $settings->setAttributes(['customTables' => [['table' => $table, 'emailColumn' => 'email', 'mode' => 'erase']]], false);
+
+        if ($settings->validate() || !$settings->hasErrors('customTables')) {
+            return "$table was accepted";
+        }
+    }
+
+    $ok = new Settings();
+    $ok->setAttributes(['customTables' => [['table' => 'my_leads', 'emailColumn' => 'email']]], false);
+
+    return $ok->validate() ?: json_encode($ok->getErrors());
+});
+
+check('a protected table in project config is ignored by the collector anyway', function() {
+    configure(['customTables' => [['table' => 'users', 'emailColumn' => 'email', 'label' => 'Sneaky', 'mode' => 'erase']]]);
+    $available = Plugin::getInstance()->collectors->get('custom')->isAvailable();
+    configure([]);
+
+    return !$available;
+});
+
+check('a CSV cell that a spreadsheet would run as a formula is defused', function() {
+    $method = new ReflectionMethod(Plugin::getInstance()->dossiers, 'csvCell');
+    $method->setAccessible(true);
+    $cell = static fn(string $v) => $method->invoke(Plugin::getInstance()->dossiers, $v);
+
+    return $cell('=HYPERLINK("x")') === "'=HYPERLINK(\"x\")"
+        && $cell('+1') === "'+1"
+        && $cell('@SUM(A1)') === "'@SUM(A1)"
+        && $cell("\t=1") === "'\t=1"
+        && $cell('ada') === 'ada'
+        && $cell('') === '';
+});
+
+check('the rate-limit key folds the spellings of one mailbox together', function() {
+    $key = [justinholtweb\lock\controllers\PortalController::class, 'rateKeyForEmail'];
+
+    return $key('Ada+news@Example.com') === 'ada@example.com'
+        && $key('a.d.a+x@googlemail.com') === 'ada@gmail.com'
+        && $key('a.d.a@example.com') === 'a.d.a@example.com';
+});
+
+check('garbage collection expires dead links, and is callable without running Craft\'s', function() {
+    $stale = new Request();
+    $stale->email = 'grace@' . DOMAIN;
+    $stale->type = Request::TYPE_ACCESS;
+    Plugin::getInstance()->requests->create($stale, false);
+
+    Craft::$app->getDb()->createCommand()->update(
+        RequestRecord::tableName(),
+        ['tokenExpiresAt' => Db::prepareDateForDb(new DateTime('-1 hour'))],
+        ['id' => $stale->id],
+    )->execute();
+
+    $result = Plugin::getInstance()->collectGarbage();
+
+    return $result['expired'] >= 1 && RequestRecord::findOne($stale->id)?->status === Request::STATUS_EXPIRED
+        ?: json_encode($result);
+});
+
+check('the retention job is never retried and outlasts a long sweep', function() {
+    $job = new justinholtweb\lock\queue\ApplyRetentionRules();
+
+    return $job instanceof yii\queue\RetryableJobInterface && !$job->canRetry(1, new Exception()) && $job->getTtr() >= 1800;
+});
+
+// ---------------------------------------------------------------------------------------------
+section('Lite');
+
+$plugin->edition = Plugin::EDITION_LITE;
+
+check('Lite: retention from the console exits non-zero instead of pretending', function() {
+    $due = Craft::$app->runAction('lock/retention/due');
+    $status = Craft::$app->runAction('lock/retention/status');
+
+    return $due === yii\console\ExitCode::UNAVAILABLE && $status === yii\console\ExitCode::UNAVAILABLE
+        ?: "due=$due status=$status";
+});
+
+check('Lite: the register reports exit non-zero', function() {
+    $gaps = Craft::$app->runAction('lock/report/gaps');
+    $register = Craft::$app->runAction('lock/report/register');
+
+    return $gaps === yii\console\ExitCode::UNAVAILABLE && $register === yii\console\ExitCode::UNAVAILABLE
+        ?: "gaps=$gaps register=$register";
+});
+
+check('Lite: the retention service refuses to run a rule', function() {
+    try {
+        Plugin::getInstance()->retention->run(RetentionRule::fromArray(['key' => 'lock-check-lite', 'scope' => 'session:stale', 'mode' => 'erase']));
+
+        return 'it ran';
+    } catch (yii\base\InvalidCallException) {
+        return Plugin::getInstance()->retention->runDue() === []
+            && !RunRecord::find()->where(['ruleKey' => 'lock-check-lite'])->exists();
+    }
+});
+
+check('Lite: a queued retention job does nothing', function() {
+    configure(['retentionRules' => [['key' => 'lock-check-lite', 'label' => 'x', 'scope' => 'session:stale', 'period' => 3650, 'unit' => 'days', 'mode' => 'erase', 'enabled' => '1']]]);
+    $job = new justinholtweb\lock\queue\ApplyRetentionRules(['ruleKeys' => ['lock-check-lite']]);
+    $job->execute(Craft::$app->getQueue());
+    configure([]);
+
+    return !RunRecord::find()->where(['ruleKey' => 'lock-check-lite'])->exists();
+});
+
+check('Lite: deadline reminders are not sent', function() {
+    configure(['notifyStaff' => true, 'contactEmail' => 'dpo@' . DOMAIN]);
+    $late = new Request();
+    $late->reference = 'DSAR-LITE-CHECK';
+    $late->status = Request::STATUS_OPEN;
+    $late->dueAt = (new DateTime())->modify('+1 day');
+    $sent = Plugin::getInstance()->notifications->sendReminder($late);
+    configure([]);
+
+    return $sent === false && $late->remindersSent === 0;
+});
+
+$plugin->edition = Plugin::EDITION_PRO;
+
+check('Pro: reminders respect the staff switch', function() {
+    configure(['notifyStaff' => false, 'contactEmail' => 'dpo@' . DOMAIN]);
+    $late = new Request();
+    $late->status = Request::STATUS_OPEN;
+    $late->dueAt = (new DateTime())->modify('+1 day');
+    $sent = Plugin::getInstance()->notifications->sendReminder($late);
+    configure([]);
+
+    return $sent === false;
 });
 
 // ---------------------------------------------------------------------------------------------

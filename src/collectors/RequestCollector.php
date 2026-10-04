@@ -10,6 +10,7 @@ use justinholtweb\lock\models\DataRecord;
 use justinholtweb\lock\models\ErasureTarget;
 use justinholtweb\lock\models\Request;
 use justinholtweb\lock\models\Subject;
+use justinholtweb\lock\records\ActivityRecord;
 use justinholtweb\lock\records\RequestRecord;
 
 /**
@@ -81,7 +82,67 @@ class RequestCollector extends BaseCollector
             $records[] = $record;
         }
 
+        $ledger = $this->ledger($subject);
+
+        if ($ledger !== null) {
+            $records[] = $ledger;
+        }
+
         return $records;
+    }
+
+    /**
+     * Lock's own activity ledger, as it concerns this person.
+     *
+     * Keyed by hash, so it is found by hash. It is disclosed but never changed: the ledger is the
+     * accountability record Article 5(2) asks for, and it carries no address to remove.
+     *
+     * Only offered once something besides Lock looking has happened. Assembling a dossier and
+     * previewing an erasure each write a line, so counting those would make the record appear
+     * between a preview and the run it approved — and change the plan's fingerprint under it.
+     */
+    private function ledger(Subject $subject): ?DataRecord
+    {
+        if ($subject->normalisedEmail() === '') {
+            return null;
+        }
+
+        $hash = $subject->emailHash();
+        $ignored = ['dossier.assembled', 'erasure.previewed'];
+
+        $substantive = (new Query())
+            ->from([ActivityRecord::tableName()])
+            ->where(['subjectHash' => $hash])
+            ->andWhere(['not in', 'action', $ignored])
+            ->exists();
+
+        if (!$substantive) {
+            return null;
+        }
+
+        $rows = (new Query())
+            ->select(['action', 'summary', 'dateCreated'])
+            ->from([ActivityRecord::tableName()])
+            ->where(['subjectHash' => $hash])
+            ->orderBy(['dateCreated' => SORT_DESC, 'id' => SORT_DESC])
+            ->limit(500)
+            ->all();
+
+        $lines = array_map(
+            static fn(array $row) => sprintf('%s  %s  %s', substr((string)$row['dateCreated'], 0, 16), $row['action'], (string)$row['summary']),
+            $rows,
+        );
+
+        $record = $this->record('ledger:activity', Craft::t('lock', 'Our record of handling your data ({n} entries)', ['n' => count($rows)]), [
+            'Entries' => $lines,
+        ]);
+        $record->categories = [DataRecord::CATEGORY_TECHNICAL];
+        $record->erasable = false;
+        $record->anonymisable = false;
+        $record->basis = Craft::t('lock', 'Required to show how personal data was handled — Article 5(2).');
+        $record->retainReason = Craft::t('lock', 'This is the log of what was done with your data, kept to show it was handled lawfully. It holds no email address, only a one-way key.');
+
+        return $record;
     }
 
     public function apply(ErasureTarget $target, Subject $subject): void

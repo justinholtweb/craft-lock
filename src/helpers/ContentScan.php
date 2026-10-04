@@ -16,8 +16,11 @@ use Throwable;
  * all of it in one place, `elements_sites.content`, as JSON, which makes a single indexed-ish
  * `LIKE` the only search that is both complete and affordable.
  *
- * Two details that a naive version gets wrong:
+ * Three details that a naive version gets wrong:
  *
+ * - **`LIKE` is a prefilter, not the match.** `%lex@corp.co%` matches `alex@corp.com`, so every
+ *   candidate is held to the bounded match in {@see Address} before it counts — and the same
+ *   pattern does the rewriting, so nothing is changed that was not found.
  * - **The needle has to be JSON-escaped.** Craft's `Json::encode()` escapes slashes and quotes,
  *   so an address is stored with the same escaping and a raw `LIKE` misses exactly the values
  *   containing the characters worth escaping.
@@ -41,18 +44,17 @@ final class ContentScan
             return [];
         }
 
-        $encoded = json_encode($value, JSON_UNESCAPED_UNICODE);
-        $needles = array_unique([$value, $encoded === false ? $value : substr($encoded, 1, -1)]);
-
         $conditions = ['or'];
 
-        foreach ($needles as $needle) {
+        foreach (Address::needles($value) as $needle) {
             $conditions[] = ['like', 'es.content', $needle];
         }
 
-        return (new Query())
-            ->select(['es.elementId'])
-            ->distinct()
+        // `LIKE` is only the prefilter: `%lex@corp.co%` also matches `alex@corp.com`. Every
+        // candidate row is then held to an exact, bounded match on its stored JSON, which is why
+        // the query over-fetches and the limit is applied afterwards.
+        $rows = (new Query())
+            ->select(['es.elementId', 'es.content'])
             ->from(['es' => Table::ELEMENTS_SITES])
             ->innerJoin(['e' => Table::ELEMENTS], '[[e.id]] = [[es.elementId]]')
             ->where([
@@ -63,8 +65,20 @@ final class ContentScan
             ])
             ->andWhere($conditions)
             ->orderBy(['es.elementId' => SORT_DESC])
-            ->limit($limit)
-            ->column();
+            ->limit($limit * 5)
+            ->all();
+
+        $ids = [];
+
+        foreach ($rows as $row) {
+            $id = (int)$row['elementId'];
+
+            if (!isset($ids[$id]) && Address::contains(is_string($row['content']) ? $row['content'] : null, $value)) {
+                $ids[$id] = $id;
+            }
+        }
+
+        return array_slice(array_values($ids), 0, $limit);
     }
 
     /**
@@ -89,7 +103,7 @@ final class ContentScan
                 continue;
             }
 
-            if (self::contains($serialized, $value)) {
+            if (Address::containsDeep($serialized, $value)) {
                 $matches[$field->handle] = $field->name;
             }
         }
@@ -113,49 +127,10 @@ final class ContentScan
 
         foreach ($handles as $handle) {
             $value = $element->getSerializedFieldValues([$handle])[$handle] ?? null;
-            $element->setFieldValue($handle, self::rewrite($value, $search, $replacement));
+            $element->setFieldValue($handle, Address::replaceDeep($value, $search, $replacement));
         }
 
         return \Craft::$app->getElements()->saveElement($element, false);
-    }
-
-    private static function contains(mixed $value, string $needle): bool
-    {
-        if (is_string($value)) {
-            return stripos($value, $needle) !== false;
-        }
-
-        // Only real arrays are containers. Every Craft element is `Traversable` — iterating one
-        // yields its attributes, not its children — so `instanceof Traversable` here would walk
-        // into an element and quietly search the wrong thing.
-        if (is_array($value)) {
-            foreach ($value as $item) {
-                if (self::contains($item, $needle)) {
-                    return true;
-                }
-            }
-        }
-
-        return false;
-    }
-
-    private static function rewrite(mixed $value, string $search, string $replacement): mixed
-    {
-        if (is_string($value)) {
-            return str_ireplace($search, $replacement, $value);
-        }
-
-        if (is_array($value)) {
-            $out = [];
-
-            foreach ($value as $key => $item) {
-                $out[$key] = self::rewrite($item, $search, $replacement);
-            }
-
-            return $out;
-        }
-
-        return $value;
     }
 
     /**

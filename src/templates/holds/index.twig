@@ -1,47 +1,58 @@
 {% extends "_layouts/cp" %}
 {% import "_includes/forms" as forms %}
+{% import "lock/_partials/macros" as lock %}
 
 {% set title = "Legal holds"|t('lock') %}
 {% set selectedSubnavItem = 'holds' %}
+
+{# A refused save hands the hold back as a route param, so what was typed survives with its errors. #}
+{% set hold = craft.app.urlManager.routeParams.hold ?? null %}
 
 {% block content %}
     {% include "lock/_partials/style" %}
 
     <p class="light">
-        {{ "A hold beats everything else here. It stops retention rules and it stops erasure requests, because “we deleted it under our automated retention policy” is not a defence to a preservation order — and Article 17(3)(e) lets you keep data needed for legal claims."|t('lock') }}
+        {{ "A hold beats everything else here. It stops retention rules and it stops erasure requests, because “we deleted it under our automated retention policy” is not a defence to a preservation order, and Article 17(3)(e) lets you keep data needed for legal claims."|t('lock') }}
     </p>
 
-    <table class="data fullwidth">
-        <thead>
-            <tr>
-                <th>{{ "Who"|t('lock') }}</th>
-                <th>{{ "Why"|t('lock') }}</th>
-                <th>{{ "Until"|t('lock') }}</th>
-                <th>{{ "Placed"|t('lock') }}</th>
-                <th></th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for hold in holds %}
+    {% if holds|length %}
+        <table class="data fullwidth">
+            <thead>
                 <tr>
-                    <td>{% if hold.isSiteWide() %}<strong>{{ "Everybody"|t('lock') }}</strong>{% else %}{{ hold.email }}{% endif %}</td>
-                    <td>{{ hold.reason }}</td>
-                    <td>{{ hold.expiresAt ? hold.expiresAt|date('short') : "no end date"|t('lock') }}</td>
-                    <td class="light">{{ hold.dateCreated|date('short') }}</td>
-                    <td class="thin">
-                        <form method="post">
-                            {{ csrfInput() }}{{ actionInput('lock/holds/delete') }}{{ redirectInput('lock/holds') }}
-                            {{ hiddenInput('holdId', hold.id) }}
-                            <button type="submit" class="btn small">{{ "Lift"|t('lock') }}</button>
-                        </form>
-                    </td>
+                    <th scope="col">{{ "Who"|t('lock') }}</th>
+                    <th scope="col">{{ "Why"|t('lock') }}</th>
+                    <th scope="col">{{ "Until"|t('lock') }}</th>
+                    <th scope="col">{{ "Placed"|t('lock') }}</th>
+                    <th scope="col"><span class="visually-hidden">{{ "Actions"|t('lock') }}</span></th>
                 </tr>
-            {% else %}
-                <tr><td colspan="5" class="light">{{ "No holds. Retention rules and erasure requests run normally."|t('lock') }}</td></tr>
-            {% endfor %}
-        </tbody>
-    </table>
+            </thead>
+            <tbody>
+                {% for existing in holds %}
+                    <tr>
+                        <td>{% if existing.isSiteWide() %}<strong>{{ "Everybody"|t('lock') }}</strong>{% else %}{{ existing.email }}{% endif %}</td>
+                        <td>{{ existing.reason }}</td>
+                        <td>{{ existing.expiresAt ? existing.expiresAt|date('short') : lock.none("no end date"|t('lock')) }}</td>
+                        <td class="light">{{ existing.dateCreated|date('short') }}</td>
+                        <td class="thin">
+                            <button type="button"
+                                class="btn small caution formsubmit"
+                                data-form="false"
+                                data-action="lock/holds/delete"
+                                data-param="holdId"
+                                data-value="{{ existing.id }}"
+                                data-redirect="{{ 'lock/holds'|hash }}"
+                                data-confirm="{{ 'Lift this hold? Retention rules and erasure requests will be able to reach this data again.'|t('lock') }}"
+                            >{{ "Lift"|t('lock') }}</button>
+                        </td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    {% else %}
+        <p class="zilch small">{{ "No holds. Retention rules and erasure requests run normally."|t('lock') }}</p>
+    {% endif %}
 
+    <hr>
     <h2>{{ "Place a hold"|t('lock') }}</h2>
 
     <form method="post">
@@ -51,18 +62,30 @@
             first: true,
             label: "Email address"|t('lock'),
             instructions: "Leave empty to hold everything, site-wide. Use that when an investigation has not yet identified whose data is involved."|t('lock'),
+            id: 'hold-email',
             name: 'email',
             type: 'email',
+            value: hold.email ?? '',
+            errors: hold ? hold.getErrors('email') : [],
         }) }}
 
         {{ forms.textField({
             label: "Reason"|t('lock'),
             instructions: "Write it for somebody reading it in two years with no memory of the matter."|t('lock'),
+            id: 'hold-reason',
             name: 'reason',
             required: true,
+            value: hold.reason ?? '',
+            errors: hold ? hold.getErrors('reason') : [],
         }) }}
 
-        {{ forms.dateField({label: "Until"|t('lock'), name: 'expiresAt'}) }}
+        {{ forms.dateField({
+            label: "Until"|t('lock'),
+            id: 'hold-expiresAt',
+            name: 'expiresAt',
+            value: hold.expiresAt ?? null,
+            errors: hold ? hold.getErrors('expiresAt') : [],
+        }) }}
 
         <button type="submit" class="btn submit">{{ "Place it"|t('lock') }}</button>
     </form>

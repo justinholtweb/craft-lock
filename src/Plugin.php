@@ -8,6 +8,7 @@ use craft\events\RegisterUrlRulesEvent;
 use craft\events\RegisterUserPermissionsEvent;
 use craft\helpers\UrlHelper;
 use craft\log\MonologTarget;
+use craft\services\Gc;
 use craft\services\UserPermissions;
 use craft\web\twig\variables\CraftVariable;
 use craft\web\UrlManager;
@@ -88,6 +89,13 @@ class Plugin extends BasePlugin
     public bool $hasCpSection = true;
     public bool $hasCpSettings = true;
 
+    /**
+     * Settings stay readable with `allowAdminChanges` off. Retention rules live in project config,
+     * and a production site is exactly where somebody needs to see what is being deleted on a
+     * timer, even though they cannot change it there.
+     */
+    public bool $hasReadOnlyCpSettings = true;
+
     public static function editions(): array
     {
         return [
@@ -124,6 +132,43 @@ class Plugin extends BasePlugin
         $this->registerPermissions();
         $this->registerTwigVariable();
         $this->registerScheduleTrigger();
+        $this->registerGarbageCollection();
+    }
+
+    /**
+     * Rides Craft's own garbage collection, so a site with no cron still expires dead links and
+     * deletes old archives. The work is in {@see collectGarbage()}, which is public so it can be
+     * called directly — triggering Craft's whole GC run to test two lines of Lock would be absurd.
+     */
+    private function registerGarbageCollection(): void
+    {
+        Event::on(Gc::class, Gc::EVENT_RUN, function() {
+            $this->collectGarbage();
+        });
+    }
+
+    /**
+     * Expires unconfirmed requests whose link has lapsed, and deletes dossier archives past
+     * their window. Returns what it did, for the caller that wants to know.
+     *
+     * Neither is a Pro feature: a stale archive is the most concentrated personal data on the
+     * site, and Lite has to clean up after itself as much as Pro does.
+     *
+     * @return array{expired: int, dossiers: int}
+     */
+    public function collectGarbage(): array
+    {
+        $result = ['expired' => 0, 'dossiers' => 0];
+
+        try {
+            $result['expired'] = $this->requests->expireUnverified();
+            $result['dossiers'] = $this->dossiers->prune();
+        } catch (\Throwable $e) {
+            // Garbage collection runs on somebody's page load. It must never be the reason it fails.
+            Craft::warning('Lock garbage collection failed: ' . $e->getMessage(), self::LOG_CATEGORY);
+        }
+
+        return $result;
     }
 
     /**
@@ -207,22 +252,26 @@ class Plugin extends BasePlugin
         $item = parent::getCpNavItem();
         $user = Craft::$app->getUser();
 
+        // Nothing in Lock is visible without the view permission, so neither is the nav.
+        if (!$user->checkPermission(self::PERMISSION_VIEW)) {
+            return null;
+        }
+
         $subnav = [
             'overview' => ['label' => Craft::t('lock', 'Overview'), 'url' => 'lock'],
             'requests' => ['label' => Craft::t('lock', 'Requests'), 'url' => 'lock/requests'],
+            'consent' => ['label' => Craft::t('lock', 'Consent'), 'url' => 'lock/consent'],
+            'activity' => ['label' => Craft::t('lock', 'Activity'), 'url' => 'lock/activity'],
         ];
 
         // The badge is the deadline, which is the only number on this screen a regulator will ever
-        // ask about — so it is in the nav, where it is seen without going looking.
-        $overdue = $this->requests->countOverdue();
+        // ask about — so it is in the nav, where it is seen without going looking. Cached for a
+        // minute: the nav is built on every control-panel page, and a count query on every page
+        // load is a tax on everybody for a number that changes a few times a day.
+        $overdue = Craft::$app->getCache()->getOrSet('lock.nav.overdue', fn() => $this->requests->countOverdue(), 60);
 
         if ($overdue > 0) {
             $item['badgeCount'] = $overdue;
-        }
-
-        if ($user->checkPermission(self::PERMISSION_VIEW)) {
-            $subnav['consent'] = ['label' => Craft::t('lock', 'Consent'), 'url' => 'lock/consent'];
-            $subnav['activity'] = ['label' => Craft::t('lock', 'Activity'), 'url' => 'lock/activity'];
         }
 
         if ($this->isPro() && $user->checkPermission(self::PERMISSION_REGISTER)) {
@@ -296,7 +345,6 @@ class Plugin extends BasePlugin
                 $event->rules['lock/verify/<code:[^\/]+>'] = 'lock/portal/verify';
                 $event->rules['lock/verify'] = 'lock/portal/verify';
                 $event->rules['lock/status'] = 'lock/portal/status';
-                $event->rules['lock/download/<code:[^\/]+>'] = 'lock/portal/download';
             },
         );
     }

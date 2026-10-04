@@ -21,6 +21,12 @@ use craft\db\Table;
  */
 class Install extends Migration
 {
+    /**
+     * Re-runnable. Each table is created only when it is missing, together with its indexes and
+     * keys, so an install that is replayed — a test harness, a half-finished first attempt — adds
+     * nothing twice. `createIndex()` in particular is not idempotent, and MySQL will happily keep
+     * duplicate indexes until a table hits its 64-key ceiling.
+     */
     public function safeUp(): bool
     {
         $this->requests();
@@ -51,6 +57,10 @@ class Install extends Migration
 
     private function requests(): void
     {
+        if ($this->db->tableExists('{{%lock_requests}}')) {
+            return;
+        }
+
         $this->createTable('{{%lock_requests}}', [
             'id' => $this->primaryKey(),
 
@@ -104,6 +114,10 @@ class Install extends Migration
 
     private function requestEvents(): void
     {
+        if ($this->db->tableExists('{{%lock_requestevents}}')) {
+            return;
+        }
+
         $this->createTable('{{%lock_requestevents}}', [
             'id' => $this->primaryKey(),
             'requestId' => $this->integer()->notNull(),
@@ -126,6 +140,10 @@ class Install extends Migration
 
     private function consents(): void
     {
+        if ($this->db->tableExists('{{%lock_consents}}')) {
+            return;
+        }
+
         $this->createTable('{{%lock_consents}}', [
             'id' => $this->primaryKey(),
 
@@ -141,7 +159,7 @@ class Install extends Migration
             'source' => $this->string(32)->notNull()->defaultValue('form'),
             'policyVersion' => $this->string(64),
             'evidence' => $this->json(),
-            'siteId' => $this->integer(),
+            'siteId' => $this->integer()->null(),
             'recordedAt' => $this->dateTime()->notNull(),
             'expiresAt' => $this->dateTime(),
             'dateCreated' => $this->dateTime()->notNull(),
@@ -154,17 +172,25 @@ class Install extends Migration
         $this->createIndex(null, '{{%lock_consents}}', ['purpose', 'state'], false);
 
         $this->addForeignKey(null, '{{%lock_consents}}', ['userId'], Table::USERS, ['id'], 'SET NULL', null);
-        $this->addForeignKey(null, '{{%lock_consents}}', ['siteId'], Table::SITES, ['id'], 'CASCADE', null);
+        // SET NULL, not CASCADE. Deleting a site must not delete the proof that people on it
+        // consented — Article 7(1) does not lapse because a site was retired.
+        $this->addForeignKey(null, '{{%lock_consents}}', ['siteId'], Table::SITES, ['id'], 'SET NULL', null);
     }
 
     private function activity(): void
     {
+        if ($this->db->tableExists('{{%lock_activity}}')) {
+            return;
+        }
+
         $this->createTable('{{%lock_activity}}', [
             'id' => $this->primaryKey(),
             'category' => $this->string(24)->notNull(),
             'action' => $this->string(64)->notNull(),
             'summary' => $this->text(),
-            'subjectEmail' => $this->string(),
+
+            // The keyed hash only, never the address. This table is append-only, so an address
+            // written here is one no erasure can ever take back out.
             'subjectHash' => $this->string(64),
             'requestId' => $this->integer(),
             'data' => $this->json(),
@@ -187,6 +213,10 @@ class Install extends Migration
 
     private function processing(): void
     {
+        if ($this->db->tableExists('{{%lock_processing}}')) {
+            return;
+        }
+
         $this->createTable('{{%lock_processing}}', [
             'id' => $this->primaryKey(),
             'name' => $this->string()->notNull(),
@@ -214,6 +244,10 @@ class Install extends Migration
 
     private function runs(): void
     {
+        if ($this->db->tableExists('{{%lock_runs}}')) {
+            return;
+        }
+
         $this->createTable('{{%lock_runs}}', [
             'id' => $this->primaryKey(),
 
@@ -222,7 +256,9 @@ class Install extends Migration
             'status' => $this->string(16)->notNull()->defaultValue('pending'),
 
             'ruleKey' => $this->string(64),
-            'subjectEmail' => $this->string(),
+
+            // Hash only, for the same reason as the activity ledger: the run that erased somebody
+            // must not be the row that remembers their address.
             'subjectHash' => $this->string(64),
             'requestId' => $this->integer(),
 
@@ -253,12 +289,17 @@ class Install extends Migration
 
         $this->createIndex(null, '{{%lock_runs}}', ['type', 'dateCreated'], false);
         $this->createIndex(null, '{{%lock_runs}}', ['ruleKey', 'dryRun', 'dateCreated'], false);
+        $this->createIndex(null, '{{%lock_runs}}', ['subjectHash'], false);
 
         $this->addForeignKey(null, '{{%lock_runs}}', ['userId'], Table::USERS, ['id'], 'SET NULL', null);
     }
 
     private function holds(): void
     {
+        if ($this->db->tableExists('{{%lock_holds}}')) {
+            return;
+        }
+
         $this->createTable('{{%lock_holds}}', [
             'id' => $this->primaryKey(),
             'email' => $this->string()->notNull()->defaultValue(''),
@@ -280,6 +321,10 @@ class Install extends Migration
 
     private function erasures(): void
     {
+        if ($this->db->tableExists('{{%lock_erasures}}')) {
+            return;
+        }
+
         $this->createTable('{{%lock_erasures}}', [
             'id' => $this->primaryKey(),
 

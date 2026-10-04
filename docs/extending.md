@@ -1,3 +1,10 @@
+---
+title: Extending
+slug: extending
+order: 70
+summary: Writing a collector for a source Lock does not know about, and the events it fires.
+---
+
 # Extending
 
 ## Adding a source
@@ -157,3 +164,21 @@ Plugin::getInstance()->activity->log(
 
 It never throws. A ledger write that can break the operation it is recording is a ledger that gets
 removed from the hot path six months later.
+
+Pass the person as `$subject` and keep their address out of the summary. The ledger stores a keyed
+hash of the subject, never the address, because it is append-only — an address written into it
+could never be erased. As a backstop, `log()` replaces the subject's own address with `[address]`
+if it turns up in the summary or the data, but it cannot know about anybody else's.
+
+## Matching an address in text
+
+If your collector searches free text, search with `LIKE` to narrow it down and then decide with
+`justinholtweb\lock\helpers\Address`:
+
+```php
+Address::contains($text, $email);                  // exact, case-insensitive, raw or JSON-escaped
+Address::replace($text, $email, $replacement);     // rewrites only what contains() would find
+```
+
+`%lex@corp.co%` matches `alex@corp.com`. A disclosure built on that hands one person's data to
+another, and an anonymisation built on it rewrites the middle of a stranger's address.

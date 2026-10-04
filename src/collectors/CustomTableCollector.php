@@ -6,6 +6,7 @@ use Craft;
 use craft\db\Query;
 use craft\helpers\Db;
 use DateTime;
+use justinholtweb\lock\helpers\TableGuard;
 use justinholtweb\lock\models\Bundle;
 use justinholtweb\lock\models\DataRecord;
 use justinholtweb\lock\models\ErasureTarget;
@@ -51,7 +52,7 @@ class CustomTableCollector extends BaseCollector
         return Craft::t('lock', 'No extra tables have been configured.');
     }
 
-    /** @return array<int, array<string, string>> */
+    /** @return array<int, array{table: string, label: string, emailColumn: string|null, userColumn: string|null, dateColumn: string|null, mode: string}> */
     private function definitions(): array
     {
         $definitions = [];
@@ -59,7 +60,9 @@ class CustomTableCollector extends BaseCollector
         foreach ($this->settings()->customTables as $row) {
             $table = $this->identifier($row['table'] ?? '');
 
-            if ($table === null) {
+            // Craft's own tables and Lock's are refused here as well as at save time — project
+            // config is a file, and a file can be edited by hand.
+            if ($table === null || TableGuard::isProtected($table)) {
                 continue;
             }
 
@@ -181,7 +184,7 @@ class CustomTableCollector extends BaseCollector
     /** The definition a record key belongs to, re-validated rather than trusted. */
     private function definitionFor(string $key): ?array
     {
-        $table = explode(':', $this->keyBody($key), 2)[0] ?? '';
+        $table = explode(':', $this->keyBody($key), 2)[0];
 
         foreach ($this->definitions() as $definition) {
             if ($definition['table'] === $table) {

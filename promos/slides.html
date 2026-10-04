@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Lock — Plugin Store promos</title>
+<link rel="stylesheet" href="fonts.css">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  :root {
+    /* Warm-shifted charcoals rather than the usual blue-shifted ones — a neutral grey next to
+       this much brown reads as green, and the slides look like two different decks. */
+    --charcoal: #191310;
+    --charcoal-light: #221a15;
+    --charcoal-lighter: #2e231c;
+    --accent: #CE8F5C;
+    --accent-deep: #8F5A30;
+    --accent-cool: #6FA396;
+    --off-white: #F5EFE6;
+  }
+  html { background: #000; }
+  body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+         color: var(--off-white); -webkit-font-smoothing: antialiased; }
+
+  .slide { position: relative; width: 1920px; height: 1080px; overflow: hidden;
+           background:
+             radial-gradient(ellipse at 84% 14%, rgba(206, 143, 92, 0.22) 0%, transparent 42%),
+             radial-gradient(ellipse at 64% 4%,  rgba(111, 163, 150, 0.10) 0%, transparent 36%),
+             radial-gradient(ellipse at 14% 86%, rgba(143, 90, 48, 0.20) 0%, transparent 44%),
+             radial-gradient(ellipse at 36% 96%, rgba(206, 143, 92, 0.07) 0%, transparent 36%),
+             linear-gradient(135deg, #191310 0%, #1e1611 30%, #1a1512 62%, #191310 100%); }
+  /* Oversized watermark: the app icon with its tile stripped. See assets/watermark.svg. */
+  .slide::after { content: ''; position: absolute; top: -18%; left: -12%;
+    width: 1180px; height: 1180px;
+    background: url('assets/watermark.svg') no-repeat center / contain;
+    opacity: .035; pointer-events: none; }
+  .slide::before { content: ''; position: absolute; inset: 0 0 auto 0; height: 6px; z-index: 5;
+    background: linear-gradient(90deg, #8F5A30, #CE8F5C, #6FA396, #8F5A30); }
+  .inner { position: relative; z-index: 2; height: 100%; padding: 118px 130px;
+           display: flex; align-items: center; }
+
+  .eyebrow { display: flex; align-items: center; gap: 18px; font-size: 20px; font-weight: 500;
+    letter-spacing: .32em; text-transform: uppercase; color: rgba(245,239,230,.62); margin-bottom: 34px; }
+  .eyebrow .rule { width: 58px; height: 3px; border-radius: 2px; background: var(--accent); }
+
+  h1, h2 { font-family: 'Jersey 20', 'Inter', sans-serif; font-weight: 400;
+           line-height: .9; letter-spacing: .005em; padding-bottom: .06em; }
+  .gradient-text { background: linear-gradient(100deg, #CE8F5C, #E7BE97, #6FA396, #CE8F5C);
+    -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
+  .solid-head { color: var(--off-white); }
+  .lede { font-size: 34px; line-height: 1.5; color: rgba(245,239,230,.74); }
+  .lede code { font-family: ui-monospace, Menlo, monospace; font-size: .9em;
+    background: rgba(255,255,255,.07); padding: 2px 8px; border-radius: 6px; }
+
+  .cover .inner { gap: 90px; }
+  .cover .copy { flex: 1 1 auto; min-width: 0; }
+  .cover h1 { margin-bottom: 26px; }
+  .cover .tagline { font-family: 'Jersey 20', 'Inter', sans-serif; line-height: 1.06;
+    color: var(--off-white); margin-bottom: 40px; max-width: 21ch; }
+  .cover .lede { max-width: 38ch; font-size: 30px; }
+  .cover .mark { flex: 0 0 auto; width: 440px; height: 440px;
+    filter: drop-shadow(14px 14px 0 rgba(0,0,0,.35)); }
+  .cover .mark img { width: 100%; height: 100%; display: block; }
+
+  .badges { display: flex; gap: 16px; margin-top: 52px; }
+  .badge { display: inline-flex; align-items: center; gap: 12px; padding: 14px 26px;
+    font-size: 22px; font-weight: 500; color: rgba(245,239,230,.85);
+    border: 1px solid rgba(255,255,255,.12); background: rgba(255,255,255,.05); border-radius: 999px; }
+  .badge .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--accent); }
+
+  .statement .inner { justify-content: center; text-align: center; }
+  .statement .copy { max-width: 1340px; }
+  .statement .eyebrow { justify-content: center; }
+  .statement h2 { margin-bottom: 40px; }
+  .statement .lede { font-size: 36px; max-width: 34ch; margin: 0 auto; }
+
+  .grid-slide .inner { align-items: center; }
+  .grid-slide .wide { width: 100%; }
+  .grid-slide h2 { margin-bottom: 48px; }
+  .cards { display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; }
+  .card { display: flex; align-items: flex-start; gap: 16px; padding: 26px 28px;
+    border-radius: 16px; background: rgba(255,255,255,.045);
+    border: 1px solid rgba(255,255,255,.08); font-size: 26px; line-height: 1.3;
+    color: var(--off-white); }
+  .card svg { flex: 0 0 auto; margin-top: 5px; }
+
+  /* Source table — the "fourteen places it looks" slide. */
+  .table-slide .inner { align-items: center; }
+  .table-slide .wide { width: 100%; }
+  .table-slide h2 { margin-bottom: 18px; }
+  .table-slide .sub { font-size: 29px; color: rgba(245,239,230,.6); margin-bottom: 34px; max-width: 78ch; line-height: 1.45; }
+  .rows { display: flex; flex-direction: column; gap: 12px; }
+  .row { display: grid; grid-template-columns: 370px 280px 1fr; align-items: center; gap: 28px;
+    padding: 18px 36px; border-radius: 16px;
+    background: rgba(255,255,255,.045); border: 1px solid rgba(255,255,255,.08); }
+  .row .src { font-size: 29px; font-weight: 600; color: var(--off-white); display: flex; align-items: center; gap: 16px; }
+  .row .src i { width: 10px; height: 10px; border-radius: 50%; background: var(--accent); flex: 0 0 auto; }
+  .row .reach { font-size: 25px; color: var(--accent); font-weight: 500; }
+  .row .when { font-size: 25px; color: rgba(245,239,230,.6); line-height: 1.35; }
+  /* The two rows that are neither erasable nor anonymisable get the cool accent, because the
+     point of the slide is that Lock says no and gives a reason rather than quietly skipping. */
+  .row.held .src i { background: var(--accent-cool); }
+  .row.held .reach { color: var(--accent-cool); }
+
+  /* Pipeline — the phase chain. */
+  .flow-slide .inner { align-items: center; }
+  .flow-slide .wide { width: 100%; }
+  .flow-slide h2 { margin-bottom: 20px; }
+  .flow-slide .sub { font-size: 30px; color: rgba(245,239,230,.6); margin-bottom: 72px; max-width: 70ch; line-height: 1.45; }
+  .chain { display: flex; align-items: stretch; gap: 14px; }
+  .step { flex: 1 1 0; padding: 46px 24px 52px; border-radius: 16px; text-align: center;
+    background: rgba(255,255,255,.045); border: 1px solid rgba(255,255,255,.08); }
+  .step b { display: block; font-family: ui-monospace, Menlo, monospace; font-size: 26px; white-space: nowrap;
+    font-weight: 600; color: var(--off-white); margin-bottom: 18px; }
+  .step span { font-size: 22px; line-height: 1.4; color: rgba(245,239,230,.55); }
+  .step i { display: block; font-style: normal; font-size: 18px; letter-spacing: .2em;
+    color: var(--accent); margin-bottom: 20px; }
+
+  /* Split slide — the anonymise-versus-erase comparison. */
+  .split-slide .inner { align-items: center; }
+  .split-slide .wide { width: 100%; }
+  .split-slide h2 { margin-bottom: 20px; }
+  .split-slide .sub { font-size: 29px; color: rgba(245,239,230,.6); margin-bottom: 52px; max-width: 76ch; line-height: 1.45; }
+  .split { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+  .pane { padding: 40px 44px 44px; border-radius: 20px;
+    background: rgba(255,255,255,.045); border: 1px solid rgba(255,255,255,.08); }
+  .pane h3 { font-family: 'Jersey 20', 'Inter', sans-serif; font-weight: 400; font-size: 52px;
+    line-height: 1; margin-bottom: 10px; color: var(--off-white); }
+  .pane .why { font-size: 23px; color: rgba(245,239,230,.5); margin-bottom: 30px; line-height: 1.4; }
+  .pane ul { list-style: none; display: flex; flex-direction: column; gap: 15px; }
+  .pane li { display: flex; align-items: flex-start; gap: 14px; font-size: 26px; line-height: 1.3; }
+  .pane li span { color: rgba(245,239,230,.88); }
+  .pane.keeps h3 { color: var(--accent); }
+  .tick { flex: 0 0 auto; margin-top: 4px; }
+
+  .footer { position: absolute; left: 130px; bottom: 62px; z-index: 3; display: flex;
+    align-items: center; gap: 18px; font-size: 22px; letter-spacing: .06em;
+    color: rgba(245,239,230,.4); }
+  .footer img { width: 40px; height: 40px; border-radius: 9px; }
+  .footer b { color: rgba(245,239,230,.72); font-weight: 600; }
+
+  /* Lock quotes articles of a regulation and is not legal advice. The cover says so. */
+  .legal { position: absolute; right: 130px; bottom: 64px; z-index: 3; max-width: 640px;
+    text-align: right; font-size: 16px; line-height: 1.5; color: rgba(245,239,230,.3); }
+
+  body.single .slide { display: none; }
+  body.single .slide.active { display: block; }
+</style>
+</head>
+<body>
+
+<!-- 1 · cover ================================================== -->
+<section class="slide cover" data-n="1">
+  <div class="inner">
+    <div class="copy">
+      <div class="eyebrow"><span class="rule"></span> Craft CMS 5</div>
+      <h1 class="gradient-text" style="font-size:200px">Lock</h1>
+      <p class="tagline" style="font-size:58px">GDPR and DSAR Governance</p>
+      <p class="lede">Subject access request intake, everything you hold on a person assembled across fourteen sources, anonymise or erase, a consent ledger, and retention rules that purge on their own.</p>
+      <div class="badges">
+        <span class="badge"><span class="dot"></span> Free · Pro $149</span>
+        <span class="badge">Craft 5.3+ · PHP 8.2+</span>
+        <span class="badge">No runtime dependencies</span>
+      </div>
+    </div>
+    <div class="mark"><img src="assets/icon.svg" alt=""></div>
+  </div>
+  <div class="legal">Lock is a tool for carrying out data protection decisions, not a substitute for legal advice. Article references are to the UK and EU GDPR and are provided for orientation only.</div>
+</section>
+
+<!-- 2 · the one question ======================================= -->
+<section class="slide statement" data-n="2">
+  <div class="inner">
+    <div class="copy">
+      <div class="eyebrow"><span class="rule"></span> Lock</div>
+      <h2 class="gradient-text" style="font-size:112px">One question,<br>two answers</h2>
+      <p class="lede"><em>What have you got on me?</em> and <em>now get rid of it.</em> Both need the same thing first — a complete and honest list of every place this site holds personal data about one person. Get that list wrong and neither failure announces itself.</p>
+    </div>
+  </div>
+  <div class="footer"><img src="assets/icon.svg" alt=""> <b>Lock</b> &nbsp;·&nbsp; justinholt.com/plugins/craft-lock</div>
+</section>
+
+<!-- 3 · where it looks ========================================= -->
+<section class="slide table-slide" data-n="3">
+  <div class="inner">
+    <div class="wide">
+      <div class="eyebrow"><span class="rule"></span> Lock</div>
+      <h2 class="gradient-text" style="font-size:96px">Fourteen places it looks</h2>
+      <p class="sub">One collector per source, and each one finds it, decides, and does it.</p>
+      <div class="rows">
+        <div class="row">
+          <span class="src"><i></i> Users &amp; addresses</span>
+          <span class="reach">Anonymise or erase</span>
+          <span class="when">The account, its profile fields, addresses and sessions.</span>
+        </div>
+        <div class="row">
+          <span class="src"><i></i> Entries &amp; custom fields</span>
+          <span class="reach">Anonymise or erase</span>
+          <span class="when">Scanned by field layout element UID, JSON escaping included.</span>
+        </div>
+        <div class="row">
+          <span class="src"><i></i> Commerce orders</span>
+          <span class="reach">Anonymise only</span>
+          <span class="when">Article 17(3)(b) — the record stays, the customer in it does not.</span>
+        </div>
+        <div class="row">
+          <span class="src"><i></i> Formie &amp; Freeform</span>
+          <span class="reach">Anonymise or erase</span>
+          <span class="when">Read where each actually stores values, not where you would hope.</span>
+        </div>
+        <div class="row">
+          <span class="src"><i></i> Comments &amp; Toss</span>
+          <span class="reach">Anonymise or erase</span>
+          <span class="when">Every integration guarded — none of them is a hard dependency.</span>
+        </div>
+        <div class="row held">
+          <span class="src"><i></i> Consent records</span>
+          <span class="reach">Never deleted</span>
+          <span class="when">Article 7(1) — you must be able to demonstrate consent.</span>
+        </div>
+        <div class="row held">
+          <span class="src"><i></i> Log files</span>
+          <span class="reach">Neither, with a reason</span>
+          <span class="when">Named in the dossier, cleared by a rule on whole files.</span>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="footer"><img src="assets/icon.svg" alt=""> <b>Lock</b> &nbsp;·&nbsp; justinholt.com/plugins/craft-lock</div>
+</section>
+
+<!-- 4 · the plan binds ========================================= -->
+<section class="slide statement" data-n="4">
+  <div class="inner">
+    <div class="copy">
+      <div class="eyebrow"><span class="rule"></span> Lock</div>
+      <h2 class="gradient-text" style="font-size:112px">The preview <em>is</em><br>what runs</h2>
+      <p class="lede">A plan lists specific records with a decided action each, and pressing the button runs <em>that list</em> — it never searches again. Rows created between the preview and the button would otherwise be deleted without anyone having seen them. The plan is fingerprinted, and a mismatch stops the run.</p>
+    </div>
+  </div>
+  <div class="footer"><img src="assets/icon.svg" alt=""> <b>Lock</b> &nbsp;·&nbsp; justinholt.com/plugins/craft-lock</div>
+</section>
+
+<!-- 5 · anonymise vs erase ===================================== -->
+<section class="slide split-slide" data-n="5">
+  <div class="inner">
+    <div class="wide">
+      <div class="eyebrow"><span class="rule"></span> Lock</div>
+      <h2 class="gradient-text" style="font-size:104px">Anonymise is not a softer erase</h2>
+      <p class="sub">A completed order is a tax record — six years in the UK, ten in Germany. But the <em>order</em> is what the obligation covers, not the customer's name inside it. So Lock empties the order and keeps it.</p>
+      <div class="split">
+        <div class="pane keeps">
+          <h3>What stays</h3>
+          <p class="why">Because a VAT return is built from it</p>
+          <ul>
+            <li><svg class="tick" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="3"><path d="M5 13l4 4L19 7" stroke-linecap="round" stroke-linejoin="round"/></svg><span>The money, the tax, the line items</span></li>
+            <li><svg class="tick" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="3"><path d="M5 13l4 4L19 7" stroke-linecap="round" stroke-linejoin="round"/></svg><span>The date the order was placed</span></li>
+            <li><svg class="tick" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="3"><path d="M5 13l4 4L19 7" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Country and region, and nothing finer</span></li>
+          </ul>
+        </div>
+        <div class="pane">
+          <h3>What goes</h3>
+          <p class="why">Because none of it is the obligation</p>
+          <ul>
+            <li><svg class="tick" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--accent-cool)" stroke-width="3"><path d="M6 6l12 12M18 6L6 18" stroke-linecap="round"/></svg><span>Name, email, phone, street address</span></li>
+            <li><svg class="tick" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--accent-cool)" stroke-width="3"><path d="M6 6l12 12M18 6L6 18" stroke-linecap="round"/></svg><span>The link back to the user account</span></li>
+            <li><svg class="tick" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--accent-cool)" stroke-width="3"><path d="M6 6l12 12M18 6L6 18" stroke-linecap="round"/></svg><span>Replaced by a pseudonym derived from the address — and in a bulk sweep, one each, because ten thousand orders sharing a pseudonym are linkable again</span></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="footer"><img src="assets/icon.svg" alt=""> <b>Lock</b> &nbsp;·&nbsp; justinholt.com/plugins/craft-lock</div>
+</section>
+
+<!-- 6 · retention is the same machinery ======================== -->
+<section class="slide flow-slide" data-n="6">
+  <div class="inner">
+    <div class="wide">
+      <div class="eyebrow"><span class="rule"></span> Lock · Pro</div>
+      <h2 class="gradient-text" style="font-size:104px">Retention is erasure with a<br>different way of choosing records</h2>
+      <p class="sub">Not "everything belonging to this person" but "everything in this scope older than this date" — and from there it is the same plan, the same preview, the same executor, the same ledger.</p>
+      <div class="chain">
+        <div class="step"><i>01</i><b>stale()</b><span>The collector picks the records the rule has aged out</span></div>
+        <div class="step"><i>02</i><b>planFor()</b><span>The same plan builder an erasure uses</span></div>
+        <div class="step"><i>03</i><b>preview</b><span>Specific records, a decided action each</span></div>
+        <div class="step"><i>04</i><b>fingerprint</b><span>Posted back, and a mismatch throws</span></div>
+        <div class="step"><i>05</i><b>run()</b><span>Walks the list, and never re-searches</span></div>
+        <div class="step"><i>06</i><b>ledger</b><span>Append-only, with no update or delete path</span></div>
+      </div>
+    </div>
+  </div>
+  <div class="footer"><img src="assets/icon.svg" alt=""> <b>Lock</b> &nbsp;·&nbsp; justinholt.com/plugins/craft-lock</div>
+</section>
+
+<!-- 7 · features grid ========================================== -->
+<section class="slide grid-slide" data-n="7">
+  <div class="inner">
+    <div class="wide">
+      <div class="eyebrow"><span class="rule"></span> Lock</div>
+      <h2 style="font-size:96px">What is in the box</h2>
+      <div class="cards">
+        <div class="card">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="3">
+            <path d="M5 13l4 4L19 7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <span>Front-end intake, verification and status lookup</span>
+        </div>
+        <div class="card">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="3">
+            <path d="M5 13l4 4L19 7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <span>The dossier, exportable, and honest when partial</span>
+        </div>
+        <div class="card">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="3">
+            <path d="M5 13l4 4L19 7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <span>Anonymise or erase, previewed and fingerprinted</span>
+        </div>
+        <div class="card">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="3">
+            <path d="M5 13l4 4L19 7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <span>A consent ledger about people, not browsers</span>
+        </div>
+        <div class="card">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="3">
+            <path d="M5 13l4 4L19 7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <span>Legal holds that outrank a deletion request</span>
+        </div>
+        <div class="card">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="3">
+            <path d="M5 13l4 4L19 7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <span>An append-only activity trail with no delete path</span>
+        </div>
+        <div class="card">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--accent-cool)" stroke-width="3">
+            <path d="M5 13l4 4L19 7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <span><b>Pro</b> — retention rules, in project config</span>
+        </div>
+        <div class="card">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--accent-cool)" stroke-width="3">
+            <path d="M5 13l4 4L19 7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <span><b>Pro</b> — Article 30 register and deadline reminders</span>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="footer"><img src="assets/icon.svg" alt=""> <b>Lock</b> &nbsp;·&nbsp; justinholt.com/plugins/craft-lock</div>
+</section>
+
+<!-- 8 · partial is a feature =================================== -->
+<section class="slide statement" data-n="8">
+  <div class="inner">
+    <div class="copy">
+      <div class="eyebrow"><span class="rule"></span> Lock</div>
+      <h2 class="gradient-text" style="font-size:112px">A partial answer<br>says it is partial</h2>
+      <p class="lede">When a collector fails, the other thirteen still run and the dossier records what went wrong and reports itself as incomplete. Nine sources out of ten with no mention of the tenth is what turns a handled request into a complaint.</p>
+    </div>
+  </div>
+  <div class="footer"><img src="assets/icon.svg" alt=""> <b>Lock</b> &nbsp;·&nbsp; justinholt.com/plugins/craft-lock</div>
+</section>
+
+<script>
+  var n = new URLSearchParams(location.search).get('s');
+  if (n) {
+    document.body.classList.add('single');
+    var el = document.querySelector('.slide[data-n="' + n + '"]');
+    if (el) el.classList.add('active');
+  }
+</script>
+</body>
+</html>

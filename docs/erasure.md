@@ -1,3 +1,10 @@
+---
+title: Anonymise and erase
+slug: erasure
+order: 30
+summary: Why the two are different decisions, what each collector allows, and how a plan is approved and run.
+---
+
 # Anonymise and erase
 
 ## The distinction
@@ -78,13 +85,25 @@ The reason is not caution for its own sake. If execution re-ran the search, rows
 the preview and the button would be deleted without anybody having seen them, and rows the preview
 listed might have gone — so the report of what happened would describe a different set from the
 one that was approved. The plan carries a fingerprint; if it no longer matches, the run stops and
-asks you to preview again.
+asks you to preview again. There is no way to run without one: the control panel refuses an
+erasure that was not previewed, and the console needs `--fingerprint` alongside `--force`.
+
+Nothing is planned or run for a request that has not been confirmed by the person who made it.
 
 ## Afterwards
 
 Lock writes a certificate: a keyed hash of the address, the pseudonym, what was done and when. It
 holds no address, because a table of "people we deleted" that lists their email addresses has not
 deleted anybody.
+
+The same goes for everything else Lock writes about the run. The run ledger keeps the plan as
+source, key, action and reason per record, against the keyed hash — not the labels, which are
+built from the data ("Order #1042 for ada@…"). The activity ledger records people by hash only,
+and takes an address out of any summary that names one. Error messages are scrubbed before they
+are stored or logged, because a database error quotes its SQL with the bound values in it. Consent
+records keep the wording and the policy version and lose the IP address, browser and page.
+Closing the erasure request then anonymises the request and deletes its dossier — see
+[Requests](requests.md).
 
 It also writes a **suppression entry**, so the same address can be blocked from coming back:
 
@@ -103,10 +122,15 @@ Article 17 contemplates.
 ## From the command line
 
 ```bash
-php craft lock/erase/preview --email=ada@example.com               # changes nothing
+php craft lock/erase/preview --email=ada@example.com               # changes nothing; prints the fingerprint
 php craft lock/erase/preview --email=ada@example.com --mode=erase
-php craft lock/erase/run     --email=ada@example.com --force       # without --force it is a dry run
+php craft lock/erase/run     --email=ada@example.com                # a dry run
+php craft lock/erase/run     --email=ada@example.com --force --fingerprint=<from preview>
 ```
+
+`--force` without `--fingerprint` exits with a usage error, and a fingerprint that no longer
+matches exits non-zero without changing anything. Pass the same `--mode` to both commands — the
+mode is part of the plan.
 
 ## What stops it
 

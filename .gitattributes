@@ -8,3 +8,5 @@
 /phpstan.neon      export-ignore
 /lint.sh           export-ignore
 /tests             export-ignore
+/promos            export-ignore
+/src/icon.jpg      export-ignore

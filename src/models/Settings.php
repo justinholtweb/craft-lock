@@ -5,6 +5,7 @@ namespace justinholtweb\lock\models;
 use Craft;
 use craft\base\Model;
 use craft\helpers\App;
+use justinholtweb\lock\helpers\TableGuard;
 
 /**
  * Lock's plugin settings.
@@ -102,8 +103,17 @@ class Settings extends Model
     /** @var int Hours a verification link stays good for. */
     public int $verificationTtl = 48;
 
-    /** @var int Max intake submissions per IP per hour. 0 disables the limit. */
+    /** @var int Max intake submissions per IP, and per address, per hour. 0 disables the limit. */
     public int $intakeRateLimit = 5;
+
+    /**
+     * @var int Max intake submissions per hour across the whole site, from everyone. 0 disables it.
+     *
+     * The backstop for a distributed script: per-IP and per-address limits do nothing against a
+     * thousand IPs each naming a different address, and every submission sends an email. Set in
+     * `config/lock.php`; there is no control in the settings screen.
+     */
+    public int $intakeGlobalLimit = 200;
 
     /** @var bool Whether a signed-in user submitting for their own address skips verification. */
     public bool $trustSignedInSubjects = true;
@@ -252,7 +262,7 @@ class Settings extends Model
      */
     public function setAttributes($values, $safeOnly = true): void
     {
-        foreach (['responseDays', 'extensionDays', 'verificationTtl', 'intakeRateLimit', 'dossierTtl', 'consentExpiryMonths', 'activityRetentionDays'] as $key) {
+        foreach (['responseDays', 'extensionDays', 'verificationTtl', 'intakeRateLimit', 'intakeGlobalLimit', 'dossierTtl', 'consentExpiryMonths', 'activityRetentionDays'] as $key) {
             if (isset($values[$key]) && $values[$key] === '') {
                 $values[$key] = $this->$key;
             }
@@ -309,7 +319,7 @@ class Settings extends Model
         return [
             [['responseDays', 'extensionDays'], 'integer', 'min' => 1, 'max' => 3650],
             [['verificationTtl'], 'integer', 'min' => 1, 'max' => 8760],
-            [['intakeRateLimit', 'dossierTtl', 'consentExpiryMonths', 'activityRetentionDays'], 'integer', 'min' => 0],
+            [['intakeRateLimit', 'intakeGlobalLimit', 'dossierTtl', 'consentExpiryMonths', 'activityRetentionDays'], 'integer', 'min' => 0],
             [['defaultMode'], 'in', 'range' => [self::MODE_ANONYMISE, self::MODE_ERASE]],
             [['scheduleTrigger'], 'in', 'range' => [self::TRIGGER_CRON, self::TRIGGER_WEB]],
             [['scheduleFrequency'], 'in', 'range' => [self::FREQUENCY_DAILY, self::FREQUENCY_WEEKLY, self::FREQUENCY_MONTHLY]],
@@ -359,6 +369,10 @@ class Settings extends Model
                 if ($value !== '' && !preg_match('/^[A-Za-z_][A-Za-z0-9_]*$/', $value)) {
                     $this->addError($attribute, Craft::t('lock', 'Row {n}: “{value}” is not a valid table or column name.', ['n' => $i + 1, 'value' => $value]));
                 }
+            }
+
+            if (preg_match('/^[A-Za-z_][A-Za-z0-9_]*$/', $table) && TableGuard::isProtected($table)) {
+                $this->addError($attribute, Craft::t('lock', 'Row {n}: “{table}” belongs to Craft or to Lock itself. Lock already searches those, and a custom-table rule pointed at one could delete or rewrite rows the site depends on.', ['n' => $i + 1, 'table' => $table]));
             }
 
             if (trim((string)($row['emailColumn'] ?? '')) === '' && trim((string)($row['userColumn'] ?? '')) === '') {

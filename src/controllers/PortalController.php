@@ -5,11 +5,11 @@ namespace justinholtweb\lock\controllers;
 use Craft;
 use craft\helpers\StringHelper;
 use craft\web\Controller;
+use craft\web\View;
 use justinholtweb\lock\models\ConsentEntry;
 use justinholtweb\lock\models\Request as SubjectRequest;
 use justinholtweb\lock\models\Settings;
 use justinholtweb\lock\Plugin;
-use justinholtweb\lock\records\ActivityRecord;
 use yii\web\ForbiddenHttpException;
 use yii\web\Response;
 
@@ -25,8 +25,10 @@ use yii\web\Response;
  *   address it is finds out either way.
  * - **The response never differs on whether the address is known.** A form that says "no account
  *   found" is an account enumeration oracle wearing a compliance hat.
- * - **Rate limited by address and by IP**, because an intake form that emails anybody you name is
- *   otherwise a mail cannon.
+ * - **Rate limited by address, by IP and in total**, because an intake form that emails anybody
+ *   you name is otherwise a mail cannon.
+ * - **Nothing changes state on a GET.** Mail scanners and link previewers follow every link in an
+ *   email, so the verification link opens a page with a button rather than confirming anything.
  */
 class PortalController extends Controller
 {
@@ -34,7 +36,6 @@ class PortalController extends Controller
         'submit' => self::ALLOW_ANONYMOUS_LIVE,
         'verify' => self::ALLOW_ANONYMOUS_LIVE,
         'status' => self::ALLOW_ANONYMOUS_LIVE,
-        'download' => self::ALLOW_ANONYMOUS_LIVE,
         'consent' => self::ALLOW_ANONYMOUS_LIVE,
     ];
 
@@ -65,7 +66,12 @@ class PortalController extends Controller
             $type = SubjectRequest::TYPE_ACCESS;
         }
 
-        if (!$this->withinRateLimit($email)) {
+        $limited = !$this->withinRateLimit('intake', [
+            'email' => self::rateKeyForEmail($email),
+            'ip' => (string)$this->request->getUserIP(),
+        ], $settings->intakeRateLimit, $settings->intakeGlobalLimit);
+
+        if ($limited) {
             // Deliberately the same answer a genuine submission gets. Telling a script that it has
             // been rate limited tells it that the previous attempts landed.
             return $this->pretendSuccess();
@@ -94,22 +100,22 @@ class PortalController extends Controller
 
         Plugin::getInstance()->requests->create($subjectRequest);
 
-        return $this->pretendSuccess($subjectRequest->reference);
+        return $this->pretendSuccess();
     }
 
     /**
      * One answer for every outcome.
      *
-     * Success, rate limit, and unknown address all land here with the same words. The reference is
-     * only included when there genuinely is one, and even then it tells an attacker nothing they
-     * did not already supply.
+     * Success, rate limit, honeypot and unknown address all land here with the same words and the
+     * same shape. That includes the reference: a reference only in the genuine case is a field
+     * whose presence says "this one landed". The subject gets theirs by email.
      */
-    private function pretendSuccess(?string $reference = null): ?Response
+    private function pretendSuccess(): Response
     {
         $message = Craft::t('lock', 'Thank you. If we hold anything under that address, we have sent an email to it with the next step.');
 
         if ($this->request->getAcceptsJson()) {
-            return $this->asJson(['success' => true, 'message' => $message, 'reference' => $reference]);
+            return $this->asJson(['success' => true, 'message' => $message]);
         }
 
         Craft::$app->getSession()->setNotice($message);
@@ -118,67 +124,148 @@ class PortalController extends Controller
     }
 
     /**
-     * How many requests one address, or one IP, may start in an hour.
+     * Counts one attempt against every key, and says whether all of them are still in bounds.
      *
-     * Both, not either: limiting only by address lets a script walk a list, and limiting only by
-     * IP lets a distributed one through.
+     * Every key is counted, not just the first one over — otherwise the IP counter stops moving
+     * the moment the address counter trips, and a script learns which one it hit.
+     *
+     * The counter is an add-then-increment rather than a read-then-write: `add()` only succeeds
+     * for the first hit in a window, so two simultaneous first hits cannot both believe they were
+     * first. It is not a transaction — the cache API has no increment — but the window it leaves
+     * is a handful of requests wide, not unbounded.
+     *
+     * @param array<string, string> $keys
      */
-    private function withinRateLimit(string $email): bool
+    private function withinRateLimit(string $bucket, array $keys, int $perKey, int $global = 0): bool
     {
-        /** @var Settings $settings */
-        $settings = Plugin::getInstance()->getSettings();
+        $within = true;
 
-        if ($settings->intakeRateLimit <= 0) {
-            return true;
-        }
+        if ($perKey > 0) {
+            foreach ($keys as $name => $value) {
+                if ($value === '') {
+                    continue;
+                }
 
-        $cache = Craft::$app->getCache();
-        $keys = [
-            'lock.intake.email.' . md5($email),
-            'lock.intake.ip.' . md5((string)$this->request->getUserIP()),
-        ];
-
-        foreach ($keys as $key) {
-            $count = (int)$cache->get($key);
-
-            if ($count >= $settings->intakeRateLimit) {
-                return false;
+                if (self::hit("lock.rate.$bucket.$name." . hash('sha256', $value)) > $perKey) {
+                    $within = false;
+                }
             }
-
-            $cache->set($key, $count + 1, 3600);
         }
 
-        return true;
+        if ($global > 0 && self::hit("lock.rate.$bucket.global") > $global) {
+            $within = false;
+        }
+
+        return $within;
+    }
+
+    /** One more attempt in a fixed one-hour window. Returns the count including this one. */
+    private static function hit(string $key, int $window = 3600): int
+    {
+        $cache = Craft::$app->getCache();
+        $now = time();
+
+        if ($cache->add($key, ['n' => 1, 'until' => $now + $window], $window)) {
+            return 1;
+        }
+
+        $current = $cache->get($key);
+        $until = is_array($current) ? (int)($current['until'] ?? 0) : 0;
+
+        if ($until <= $now) {
+            $cache->set($key, ['n' => 1, 'until' => $now + $window], $window);
+
+            return 1;
+        }
+
+        $count = (int)($current['n'] ?? 0) + 1;
+
+        // The window keeps its original end. Re-arming the TTL on every hit would turn a steady
+        // trickle into a limit that never resets — fatal for the site-wide counter.
+        $cache->set($key, ['n' => $count, 'until' => $until], max(1, $until - $now));
+
+        return $count;
+    }
+
+    /**
+     * The address as a rate-limit key, with the cheap variations folded together.
+     *
+     * `Ada+1@x`, `ada+2@x` and `ADA@x` are one mailbox, and a limit that counts them separately
+     * is a limit of five per spelling. Gmail ignores dots in the local part and answers to
+     * googlemail.com as well, so those are folded too. Only the key is normalised — the request
+     * keeps the address exactly as it was typed.
+     */
+    public static function rateKeyForEmail(string $email): string
+    {
+        $email = mb_strtolower(trim($email));
+        $at = strrpos($email, '@');
+
+        if ($at === false) {
+            return $email;
+        }
+
+        $local = substr($email, 0, $at);
+        $domain = substr($email, $at + 1);
+
+        if (($plus = strpos($local, '+')) !== false) {
+            $local = substr($local, 0, $plus);
+        }
+
+        if ($domain === 'gmail.com' || $domain === 'googlemail.com') {
+            $local = str_replace('.', '', $local);
+            $domain = 'gmail.com';
+        }
+
+        return "$local@$domain";
     }
 
     /**
      * Renders a portal page, letting the site override it.
      *
-     * A site template at `lock/verify.twig` wins over the plugin's own. The built-in pages are
-     * deliberately plain and unbranded — they work on a fresh install, which matters because the
-     * link in a verification email must never 404 — but the page a data subject lands on is a page
-     * on somebody's website, and they should be able to make it look like one.
+     * A site template at `lock/<page>.twig` — `lock/verify.twig`, `lock/verified.twig`,
+     * `lock/status.twig` — wins over the plugin's own. The built-in pages are deliberately plain
+     * and unbranded — they work on a fresh install, which matters because the link in a
+     * verification email must never 404 — but the page a data subject lands on is a page on
+     * somebody's website, and they should be able to make it look like one.
      */
     private function renderPortal(string $template, array $variables): Response
     {
         $view = Craft::$app->getView();
 
-        if ($view->doesTemplateExist("lock/$template", \craft\web\View::TEMPLATE_MODE_SITE)) {
-            return $this->renderTemplate("lock/$template", $variables, \craft\web\View::TEMPLATE_MODE_SITE);
+        if ($view->doesTemplateExist("lock/$template", View::TEMPLATE_MODE_SITE)) {
+            return $this->renderTemplate("lock/$template", $variables, View::TEMPLATE_MODE_SITE);
         }
 
-        return $this->renderTemplate("lock/_portal/$template", $variables, \craft\web\View::TEMPLATE_MODE_CP);
+        return $this->renderTemplate("lock/_portal/$template", $variables, View::TEMPLATE_MODE_CP);
     }
 
-    /** Confirms identity by following the emailed link. */
-    public function actionVerify(): Response
+    /**
+     * Confirms identity from the emailed link — in two steps.
+     *
+     * A GET only shows a page with a button. Mail security gateways, link previewers and
+     * "safe links" rewriters fetch every URL in an inbound message, and a confirmation that
+     * fires on GET would be confirmed by the subject's mail filter before the subject ever saw
+     * it — which is not the subject confirming anything. The POST is what verifies.
+     */
+    public function actionVerify(?string $code = null): Response
     {
-        $request = Plugin::getInstance()->requests->getByToken((string)$this->request->getParam('code', ''));
+        // The code arrives as an action argument from the `lock/verify/<code>` route — Craft does
+        // not copy route params into the query string, so `getParam('code')` never sees it — or
+        // as a body param from the confirm form, which posts to the action directly.
+        $code = (string)($this->request->getBodyParam('code') ?? $code ?? $this->request->getQueryParam('code', ''));
+        $request = Plugin::getInstance()->requests->getByToken($code);
 
         if ($request === null) {
             return $this->renderPortal('verified', [
                 'ok' => false,
                 'message' => Craft::t('lock', 'That link has expired or has already been used. Send the request again and we will email a fresh one.'),
+            ]);
+        }
+
+        if (!$this->request->getIsPost()) {
+            return $this->renderPortal('verify', [
+                'code' => $code,
+                'request' => $request,
             ]);
         }
 
@@ -193,15 +280,31 @@ class PortalController extends Controller
         ]);
     }
 
-    /** Lets a subject look up their own request with the reference and the address. */
+    /**
+     * Lets a subject look up their own request with the reference and the address.
+     *
+     * Rate limited by IP and by reference. References are sequential by design — they are meant
+     * to be quoted — so without a limit this is a way to test addresses against every request of
+     * the year. A limited lookup gets the same "could not match" as a wrong one.
+     */
     public function actionStatus(): Response
     {
-        $reference = trim((string)$this->request->getParam('reference', ''));
+        /** @var Settings $settings */
+        $settings = Plugin::getInstance()->getSettings();
+
+        $reference = StringHelper::safeTruncate(trim((string)$this->request->getParam('reference', '')), 32);
         $email = mb_strtolower(trim((string)$this->request->getParam('email', '')));
+        $searched = $reference !== '' && $email !== '';
         $found = null;
 
-        if ($reference !== '' && $email !== '') {
-            $candidate = Plugin::getInstance()->requests->getByReference($reference);
+        if ($searched) {
+            $limit = $settings->intakeRateLimit > 0 ? $settings->intakeRateLimit * 4 : 0;
+            $within = $this->withinRateLimit('status', [
+                'ip' => (string)$this->request->getUserIP(),
+                'reference' => mb_strtoupper($reference),
+            ], $limit);
+
+            $candidate = $within ? Plugin::getInstance()->requests->getByReference($reference) : null;
 
             // Both halves have to match. The reference alone is guessable — it is sequential by
             // design, because it is meant to be quoted in correspondence.
@@ -214,69 +317,113 @@ class PortalController extends Controller
             'reference' => $reference,
             'email' => $email,
             'request' => $found,
-            'searched' => $reference !== '' && $email !== '',
+            'searched' => $searched,
         ]);
     }
 
     /**
-     * Records a consent decision from a front-end form or a banner.
+     * Records a consent decision from a front-end form.
      *
-     * The ingest point a cookie panel posts to. It records against an *address*, which is the
-     * thing a banner cannot do on its own — which is why a banner and this are complementary
-     * rather than competing.
+     * **Signed in:** the decision is recorded against the account's own address, whatever was
+     * posted, and grants and withdrawals both count. That is the only case where Lock knows whose
+     * decision it is.
+     *
+     * **Signed out:** withdrawal only, and the answer never says whether anything was recorded.
+     * A grant from an anonymous form is a forged consent waiting to happen — anybody could sign
+     * anybody up to marketing — so it is ignored. A withdrawal is honoured, because Article 7(3)
+     * requires withdrawing to be as easy as giving and an unsubscribe form cannot demand a login;
+     * the worst a forged withdrawal does is stop the site emailing somebody. It is marked as
+     * unverified in the evidence so the ledger never claims more than it knows.
+     *
+     * Either way the current state is never echoed back to an anonymous caller: "here is what
+     * this address has agreed to" for any address you type is a lookup service.
      */
     public function actionConsent(): ?Response
     {
         $this->requirePostRequest();
 
-        $email = mb_strtolower(trim((string)$this->request->getBodyParam('email', '')));
+        /** @var Settings $settings */
+        $settings = Plugin::getInstance()->getSettings();
         $identity = Craft::$app->getUser()->getIdentity();
+        $signedIn = $identity !== null;
 
-        if ($email === '' && $identity !== null) {
-            $email = mb_strtolower((string)$identity->email);
-        }
+        $email = $signedIn
+            ? mb_strtolower(trim((string)$identity->email))
+            : mb_strtolower(trim((string)$this->request->getBodyParam('email', '')));
 
-        // A signed-in visitor may only record consent for themselves. Without this, the endpoint
-        // is a way to record that somebody else agreed to marketing.
-        if ($identity !== null && $email !== mb_strtolower((string)$identity->email)) {
-            throw new ForbiddenHttpException(Craft::t('lock', 'You can only change your own preferences.'));
-        }
+        $limit = $settings->intakeRateLimit > 0 ? $settings->intakeRateLimit * 4 : 0;
+        $within = $this->withinRateLimit('consent', [
+            'email' => self::rateKeyForEmail($email),
+            'ip' => (string)$this->request->getUserIP(),
+        ], $limit);
 
-        if ($email === '') {
+        if ($email === '' && $signedIn) {
             throw new ForbiddenHttpException(Craft::t('lock', 'An email address is needed to record a preference against.'));
         }
 
-        /** @var Settings $settings */
-        $settings = Plugin::getInstance()->getSettings();
         $allowed = array_keys($settings->purposeOptions());
         $granted = (array)$this->request->getBodyParam('purposes', []);
         $consent = Plugin::getInstance()->consent;
+        $valid = filter_var($email, FILTER_VALIDATE_EMAIL) !== false;
 
         $evidence = [
             'ip' => $this->request->getUserIP(),
-            'url' => $this->request->getReferrer(),
+            'url' => StringHelper::safeTruncate((string)$this->request->getReferrer(), 500) ?: null,
             'text' => StringHelper::safeTruncate((string)$this->request->getBodyParam('wording', ''), 2000) ?: null,
             'userAgent' => StringHelper::safeTruncate((string)$this->request->getUserAgent(), 500),
         ];
 
-        foreach ($allowed as $purpose) {
-            $wants = in_array($purpose, $granted, true) || (string)($granted[$purpose] ?? '') === '1';
-            $current = $consent->allows($email, $purpose);
+        if (!$signedIn) {
+            $evidence['verified'] = false;
+        }
 
-            // Only a *change* is written. Re-recording the same answer on every page view would
-            // make the ledger unreadable and hide the decisions that matter in the noise.
-            if ($wants === $current) {
-                continue;
+        $policyVersion = StringHelper::safeTruncate(trim((string)$this->request->getBodyParam('policyVersion', '')), 64) ?: null;
+
+        if ($within && $valid) {
+            foreach ($allowed as $purpose) {
+                $wants = in_array($purpose, $granted, true) || (string)($granted[$purpose] ?? '') === '1';
+
+                // Signed out, only a withdrawal is acted on. See the method docblock.
+                if (!$signedIn && $wants) {
+                    continue;
+                }
+
+                $current = $consent->allows($email, $purpose);
+
+                // Only a *change* is written. Re-recording the same answer on every page view
+                // would make the ledger unreadable and hide the decisions that matter in the noise.
+                if ($wants === $current) {
+                    continue;
+                }
+
+                $consent->record(
+                    $email,
+                    $purpose,
+                    $wants ? ConsentEntry::STATE_GRANTED : ConsentEntry::STATE_WITHDRAWN,
+                    ConsentEntry::SOURCE_FORM,
+                    $evidence,
+                    userId: $signedIn ? (int)$identity->id : null,
+                    policyVersion: $policyVersion,
+                );
+            }
+        }
+
+        if (!$signedIn) {
+            // One answer, whatever happened: recorded, nothing to change, rate limited, or an
+            // address that was never on file.
+            $message = Craft::t('lock', 'Thank you. If that address is on our list, your preferences have been updated.');
+
+            if ($this->request->getAcceptsJson()) {
+                return $this->asJson(['success' => true, 'message' => $message]);
             }
 
-            $consent->record(
-                $email,
-                $purpose,
-                $wants ? ConsentEntry::STATE_GRANTED : ConsentEntry::STATE_WITHDRAWN,
-                ConsentEntry::SOURCE_FORM,
-                $evidence,
-                policyVersion: (string)$this->request->getBodyParam('policyVersion', '') ?: null,
-            );
+            Craft::$app->getSession()->setNotice($message);
+
+            return $this->redirectToPostedUrl();
+        }
+
+        if (!$within) {
+            return $this->asFailure(Craft::t('lock', 'Too many changes in a short time. Try again in a while.'));
         }
 
         if ($this->request->getAcceptsJson()) {
@@ -286,37 +433,5 @@ class PortalController extends Controller
         Craft::$app->getSession()->setNotice(Craft::t('lock', 'Your preferences have been saved.'));
 
         return $this->redirectToPostedUrl();
-    }
-
-    /**
-     * Hands a built dossier to the subject.
-     *
-     * Token-gated and single-purpose. The file is served from storage, never from a public path —
-     * a dossier under the web root is one guessed filename away from being the site's worst
-     * possible data breach.
-     */
-    public function actionDownload(string $code): Response
-    {
-        $request = Plugin::getInstance()->requests->getByToken($code);
-
-        if ($request === null || $request->dossierPath === null) {
-            throw new ForbiddenHttpException(Craft::t('lock', 'That download link is no longer valid.'));
-        }
-
-        $path = Plugin::getInstance()->dossiers->pathFor($request->dossierPath);
-
-        if (!is_file($path)) {
-            throw new ForbiddenHttpException(Craft::t('lock', 'That file is no longer available. Ask us and we will prepare it again.'));
-        }
-
-        Plugin::getInstance()->activity->log(
-            ActivityRecord::CATEGORY_ACCESS,
-            'dossier.downloaded',
-            Craft::t('lock', '{reference} was downloaded by the subject.', ['reference' => $request->reference]),
-            $request->getSubject(),
-            $request->id,
-        );
-
-        return $this->response->sendFile($path, basename($path), ['inline' => false]);
     }
 }

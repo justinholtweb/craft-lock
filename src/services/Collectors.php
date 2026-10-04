@@ -86,6 +86,7 @@ class Collectors extends Component
                 $collector = new $collector();
             }
 
+            // @phpstan-ignore instanceof.alwaysTrue (event handlers are third-party code; the event's type is a contract, not a guarantee)
             if (!$collector instanceof CollectorInterface) {
                 continue;
             }

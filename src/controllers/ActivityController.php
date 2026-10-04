@@ -2,6 +2,7 @@
 
 namespace justinholtweb\lock\controllers;
 
+use Craft;
 use craft\web\Controller;
 use DateTime;
 use justinholtweb\lock\Plugin;
@@ -26,12 +27,12 @@ class ActivityController extends Controller
             'entries' => Plugin::getInstance()->activity->recent(300, $category !== '' ? $category : null),
             'category' => $category,
             'categories' => [
-                ActivityRecord::CATEGORY_REQUEST => 'Requests',
-                ActivityRecord::CATEGORY_ACCESS => 'Access',
-                ActivityRecord::CATEGORY_ERASURE => 'Erasure',
-                ActivityRecord::CATEGORY_CONSENT => 'Consent',
-                ActivityRecord::CATEGORY_RETENTION => 'Retention',
-                ActivityRecord::CATEGORY_ADMIN => 'Administration',
+                ActivityRecord::CATEGORY_REQUEST => Craft::t('lock', 'Requests'),
+                ActivityRecord::CATEGORY_ACCESS => Craft::t('lock', 'Access'),
+                ActivityRecord::CATEGORY_ERASURE => Craft::t('lock', 'Erasure'),
+                ActivityRecord::CATEGORY_CONSENT => Craft::t('lock', 'Consent'),
+                ActivityRecord::CATEGORY_RETENTION => Craft::t('lock', 'Retention'),
+                ActivityRecord::CATEGORY_ADMIN => Craft::t('lock', 'Administration'),
             ],
             'tally' => Plugin::getInstance()->activity->tally((new DateTime())->modify('-30 days')),
         ]);

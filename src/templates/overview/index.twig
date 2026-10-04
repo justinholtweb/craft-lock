@@ -1,5 +1,6 @@
 {% extends "_layouts/cp" %}
 {% import "_includes/forms" as forms %}
+{% import "lock/_partials/macros" as lock %}
 
 {% set title = "Data protection"|t('lock') %}
 {% set selectedSubnavItem = 'overview' %}
@@ -9,28 +10,28 @@
 
     <div class="lock-grid">
         <div class="lock-stat">
-            <h4>{{ "Open requests"|t('lock') }}</h4>
+            <h2 class="lock-stat-heading">{{ "Open requests"|t('lock') }}</h2>
             <div class="lock-figure">{{ openCount }}</div>
         </div>
         <div class="lock-stat{{ overdueCount > 0 ? ' lock-alarm' }}">
-            <h4>{{ "Past the deadline"|t('lock') }}</h4>
+            <h2 class="lock-stat-heading">{{ "Past the deadline"|t('lock') }}</h2>
             <div class="lock-figure">{{ overdueCount }}</div>
         </div>
         <div class="lock-stat">
-            <h4>{{ "Erasures, 30 days"|t('lock') }}</h4>
+            <h2 class="lock-stat-heading">{{ "Erasures, 30 days"|t('lock') }}</h2>
             <div class="lock-figure">{{ erasures }}</div>
         </div>
         <div class="lock-stat{{ staleConsent > 0 ? ' lock-alarm' }}">
-            <h4>{{ "Consent needing re-asking"|t('lock') }}</h4>
+            <h2 class="lock-stat-heading">{{ "Consent needing re-asking"|t('lock') }}</h2>
             <div class="lock-figure">{{ staleConsent }}</div>
         </div>
     </div>
 
     {% if overdueCount > 0 %}
-        <div class="lock-flag lock-bad">
+        <div class="readable"><blockquote class="note">
             <strong>{{ "{n} requests are past their statutory deadline."|t('lock', {n: overdueCount}) }}</strong>
             {{ "A late answer is itself a breach of Article 12(3), separately from whatever the request was about."|t('lock') }}
-        </div>
+        </blockquote></div>
     {% endif %}
 
     <h2>{{ "Open requests"|t('lock') }}</h2>
@@ -39,11 +40,11 @@
         <table class="data fullwidth">
             <thead>
                 <tr>
-                    <th>{{ "Reference"|t('lock') }}</th>
-                    <th>{{ "Kind"|t('lock') }}</th>
-                    <th>{{ "Subject"|t('lock') }}</th>
-                    <th>{{ "Status"|t('lock') }}</th>
-                    <th>{{ "Due"|t('lock') }}</th>
+                    <th scope="col">{{ "Reference"|t('lock') }}</th>
+                    <th scope="col">{{ "Kind"|t('lock') }}</th>
+                    <th scope="col">{{ "Subject"|t('lock') }}</th>
+                    <th scope="col">{{ "Status"|t('lock') }}</th>
+                    <th scope="col">{{ "Due"|t('lock') }}</th>
                 </tr>
             </thead>
             <tbody>
@@ -51,12 +52,12 @@
                     {% set days = request.daysRemaining() %}
                     <tr>
                         <td><a href="{{ url('lock/requests/' ~ request.id) }}"><code>{{ request.reference }}</code></a></td>
-                        <td>{{ request.type }}</td>
+                        <td>{{ request.typeLabel() }}</td>
                         <td>{{ request.email }}</td>
-                        <td>{{ request.statusLabel() }}</td>
+                        <td>{{ lock.requestStatus(request) }}</td>
                         <td class="lock-due lock-{{ request.urgency() }}">
                             {%- if days is null -%}
-                                —
+                                {{ lock.none() }}
                             {%- elseif days < 0 -%}
                                 {{ "{n} days late"|t('lock', {n: days|abs}) }}
                             {%- else -%}
@@ -68,57 +69,66 @@
             </tbody>
         </table>
     {% else %}
-        <p class="light">{{ "Nothing outstanding."|t('lock') }}</p>
+        <p class="zilch small">{{ "Nothing outstanding."|t('lock') }}</p>
     {% endif %}
 
     {% if isPro %}
         {% if uncovered|length %}
             <h2>{{ "Data with no expiry"|t('lock') }}</h2>
-            <div class="lock-flag">
+            <div class="readable"><blockquote class="note warning">
                 {{ "These sources hold personal data and no retention rule points at them, so nothing in them is ever deleted."|t('lock') }}
                 <ul>
                     {% for scope in uncovered %}
-                        <li><strong>{{ scope.label }}</strong> — {{ scope.description }}</li>
+                        <li><strong>{{ scope.label }}</strong>: {{ scope.description }}</li>
                     {% endfor %}
                 </ul>
                 <p><a class="btn" href="{{ url('lock/settings/retention') }}">{{ "Write a rule"|t('lock') }}</a></p>
-            </div>
+            </blockquote></div>
         {% endif %}
 
         {% if gaps|length %}
             <h2>{{ "Register gaps"|t('lock') }}</h2>
-            <div class="lock-flag">
+            <div class="readable"><blockquote class="note warning">
                 <ul>
                     {% for gap in gaps|slice(0, 8) %}<li>{{ gap }}</li>{% endfor %}
                 </ul>
                 <p><a class="btn" href="{{ url('lock/register') }}">{{ "Open the register"|t('lock') }}</a></p>
-            </div>
+            </blockquote></div>
         {% endif %}
 
         {% if nextRun %}
             <p class="light">{{ "Next scheduled retention run: {date}."|t('lock', {date: nextRun|datetime('short')}) }}</p>
         {% endif %}
     {% else %}
-        <div class="lock-flag">
+        <div class="readable"><blockquote class="note tip">
             {{ "Retention rules, the Article 30 register and deadline reminders are in Lock Pro. Everything needed to answer a request is in this edition."|t('lock') }}
-        </div>
+        </blockquote></div>
     {% endif %}
 
     <h2>{{ "Recent activity"|t('lock') }}</h2>
 
-    <table class="data fullwidth">
-        <tbody>
-            {% for entry in activity %}
+    {% if activity|length %}
+        <table class="data fullwidth">
+            <thead>
                 <tr>
-                    <td class="thin"><span class="light">{{ entry.dateCreated|datetime('short') }}</span></td>
-                    <td class="thin"><code>{{ entry.category }}</code></td>
-                    <td>{{ entry.summary ?? entry.action }}</td>
+                    <th scope="col">{{ "When"|t('lock') }}</th>
+                    <th scope="col">{{ "Category"|t('lock') }}</th>
+                    <th scope="col">{{ "What"|t('lock') }}</th>
                 </tr>
-            {% else %}
-                <tr><td class="light">{{ "Nothing yet."|t('lock') }}</td></tr>
-            {% endfor %}
-        </tbody>
-    </table>
+            </thead>
+            <tbody>
+                {% for entry in activity %}
+                    <tr>
+                        <td class="thin"><span class="light">{{ entry.dateCreated|datetime('short') }}</span></td>
+                        <td class="thin">{{ lock.activityCategory(entry.category) }}</td>
+                        <td>{{ entry.summary ?? entry.action }}</td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    {% else %}
+        <p class="zilch small">{{ "Nothing yet."|t('lock') }}</p>
+    {% endif %}
 
     <p><a href="{{ url('lock/activity') }}">{{ "The whole ledger"|t('lock') }} &rarr;</a></p>
 {% endblock %}

@@ -56,7 +56,9 @@ class Consent extends Component
         $entry->state = $state;
         $entry->source = $source;
         $entry->evidence = $evidence;
-        $entry->policyVersion = $policyVersion;
+        // The column is 64 characters. A longer value would fail the insert on a strict database
+        // and silently lose the decision — worse than keeping the first 64 characters of the label.
+        $entry->policyVersion = $policyVersion !== null ? (mb_substr(trim($policyVersion), 0, 64) ?: null) : null;
         $entry->siteId = $siteId ?? Craft::$app->getSites()->getCurrentSite()->id;
         $entry->recordedAt = new DateTime();
 
@@ -102,7 +104,7 @@ class Consent extends Component
             ]),
             $subject,
             null,
-            ['purpose' => $entry->purpose, 'policyVersion' => $policyVersion],
+            ['purpose' => $entry->purpose, 'policyVersion' => $entry->policyVersion],
         );
 
         return $entry;

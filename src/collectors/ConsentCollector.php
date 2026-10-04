@@ -6,6 +6,7 @@ use Craft;
 use craft\db\Query;
 use craft\helpers\Db;
 use DateTime;
+use justinholtweb\lock\helpers\Address;
 use justinholtweb\lock\models\Bundle;
 use justinholtweb\lock\models\DataRecord;
 use justinholtweb\lock\models\ErasureTarget;
@@ -90,10 +91,31 @@ class ConsentCollector extends BaseCollector
         // The hash stays. It is what still ties the proof to a person if that person ever comes
         // back and says they never agreed — without it, an anonymised consent record proves that
         // *somebody* agreed, which is not the same thing.
+        //
+        // The evidence keeps what was *shown* — the wording, the policy version — and loses what
+        // identifies the person who saw it: their IP address, their browser, and the URL they
+        // were on, which on a preferences page routinely carries their address or account ID.
+        $id = $this->keyId($target->key);
+        $evidence = (new Query())->select(['evidence'])->from([ConsentRecord::tableName()])->where(['id' => $id])->scalar();
+        $evidence = is_string($evidence) ? json_decode($evidence, true) : $evidence;
+
+        if (is_array($evidence)) {
+            foreach (['ip', 'userAgent', 'url'] as $key) {
+                if (array_key_exists($key, $evidence)) {
+                    $evidence[$key] = null;
+                }
+            }
+
+            if ($subject->normalisedEmail() !== '') {
+                $evidence = Address::replaceDeep($evidence, $subject->normalisedEmail(), '[address]');
+            }
+        }
+
         Craft::$app->getDb()->createCommand()->update(ConsentRecord::tableName(), [
             'email' => $subject->pseudonym() . '@' . ($this->settings()->anonymousDomain ?: 'anonymised.invalid'),
             'userId' => null,
-        ], ['id' => $this->keyId($target->key)])->execute();
+            'evidence' => is_array($evidence) && $evidence !== [] ? \craft\helpers\Json::encode($evidence) : null,
+        ], ['id' => $id])->execute();
     }
 
     public function scopes(): array

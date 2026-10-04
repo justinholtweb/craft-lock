@@ -60,6 +60,7 @@ class CommerceCollector extends BaseCollector
         // Matched on the order's own email column, not on the customer account. Most stores take
         // more guest orders than account orders, and a search that starts from the user record
         // finds none of them.
+        // @phpstan-ignore class.notFound (Commerce is optional; isAvailable() checks class_exists first)
         $orders = \craft\commerce\elements\Order::find()
             ->email($email)
             ->isCompleted(null)
@@ -152,6 +153,7 @@ class CommerceCollector extends BaseCollector
             return;
         }
 
+        // @phpstan-ignore class.notFound (Commerce is optional; isAvailable() checks class_exists first)
         $order = \craft\commerce\elements\Order::find()->id((int)substr($body, 6))->isCompleted(null)->status(null)->one();
 
         if ($order === null) {
@@ -235,6 +237,7 @@ class CommerceCollector extends BaseCollector
             return [];
         }
 
+        // @phpstan-ignore class.notFound (Commerce is optional; isAvailable() checks class_exists first)
         $query = \craft\commerce\elements\Order::find()
             ->isCompleted(!$isCarts)
             ->status(null)

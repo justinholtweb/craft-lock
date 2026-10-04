@@ -5,7 +5,7 @@
 Lock does GDPR and DSAR governance: subject access request intake, "everything we hold on this
 person" assembled across every source the site has, anonymise vs. erase, a consent and
 processing-activity ledger, and retention rules that purge automatically. Distributed as
-`justinholtweb/craft-lock`. **Paid, Lite + Pro.**
+`justinholtweb/craft-lock`. **Free Lite, Pro $149** ($119/year renewal).
 
 The pitch it was built to: *Craft's store has cookie banners and nothing else.* Toss and Jack
 write the policy; this is the plugin that makes it true.
@@ -77,6 +77,12 @@ attached, and the remedy is a retention rule on whole files. Consent records are
   not deleted anybody. Keyed hash only — enough for a membership test, not for enumeration.
 - **User foreign keys are `SET NULL`, never `CASCADE`.** Deleting a person must not delete the
   evidence that their request was handled. The one cascade is request → timeline.
+- **Lock's own tables hold the keyed hash, never the address.** `lock_activity`, `lock_runs` and
+  the stored plan carry `subjectHash` and source|key|action only — no labels, which name people.
+  An erasure request is itself anonymised when it is closed as completed, and its dossier files
+  deleted. `checks.php` greps every `lock_*` table and `storage/lock` for the address afterwards.
+- **The public consent endpoint grants only for a signed-in user, against their own address.**
+  Signed out, it can withdraw (marked unverified) and answers identically whatever happened.
 - **`lock_activity` has no FK to the request**, so the line saying a request was deleted outlives
   the row it is about.
 
@@ -105,6 +111,21 @@ attached, and the remedy is a retention rule on whole files. Consent records are
 - **Every Craft element is `Traversable`.** `helpers/Readable` treats only `is_array()` as a
   container and resolves element queries explicitly; anything else walks an element into its
   attribute values.
+- **Craft does not copy route parameters into the query string.** `getParam('code')` never saw the
+  `<code>` from `lock/verify/<code>`, so every verification link answered "expired". Take it as an
+  action argument.
+- **Opening the verification link changes nothing; the button on that page does.** Corporate mail
+  scanners (Safe Links, Mimecast) fetch every link, and a GET that verifies lets anybody's request
+  be confirmed by a robot.
+- **Craft 5 has no `Users::getUserByEmail()`**, and `getUserByUsernameOrEmail()` matches usernames
+  too. `Subject` uses `User::find()->email(Db::escapeParam($email))->status(null)`.
+- **A console `beforeAction()` returning false exits 0**, so a Lite cron looked successful. Gate
+  inside each action and return `ExitCode::UNAVAILABLE`.
+- **Dry-run-first counts dry runs.** It used to count only real runs, so every run of a new rule
+  was forced dry for ever and nothing was ever purged.
+- **`LIKE '%addr%'` is a pre-filter, never the decision.** It finds `alex@corp.com` for
+  `lex@corp.co`. `helpers/Address` decides matches and does the rewriting, with one bounded pattern
+  for both stored forms.
 - Adding `P60D` to a timezone-aware `DateTime` across a DST boundary moves the timestamp by 60
   days ± an hour. Compare deadlines in **days**, never in seconds.
 
@@ -118,9 +139,9 @@ No local PHP on this Mac. Everything runs in the plugin-testing container.
 
 ```sh
 cd ~/Sites/plugin-testing
-docker exec -w /var/www/html ddev-plugin-testing-web php /var/www/craft-lock/tests/integration/checks.php   # 121 checks
+docker exec -w /var/www/html ddev-plugin-testing-web php /var/www/craft-lock/tests/integration/checks.php   # 150 checks
 docker exec ddev-plugin-testing-web bash /var/www/craft-lock/tests/integration/cp-smoke.sh                  # 16 screens
-docker exec -w /var/www/craft-lock ddev-plugin-testing-web php vendor/bin/phpunit                           # 29 tests
+docker exec -w /var/www/craft-lock ddev-plugin-testing-web php vendor/bin/phpunit                           # 39 tests
 docker exec -w /var/www/craft-lock ddev-plugin-testing-web php vendor/bin/ecs check
 ./lint.sh
 ```

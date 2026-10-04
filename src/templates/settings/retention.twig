@@ -1,76 +1,126 @@
 {% extends "_layouts/cp" %}
 {% import "_includes/forms" as forms %}
+{% import "lock/_partials/macros" as lock %}
 
+{% set readOnly = readOnly ?? false %}
 {% set title = "Retention rules"|t('lock') %}
 {% set selectedSubnavItem = 'settings' %}
-{% set tabs = {
-    general: {label: "General"|t('lock'), url: url('lock/settings')},
-    collectors: {label: "Where to look"|t('lock'), url: url('lock/settings/collectors')},
-    retention: {label: "Retention rules"|t('lock'), url: url('lock/settings/retention')},
-} %}
-{% set selectedTab = 'retention' %}
+{% set crumbs = [{label: "Settings"|t('lock'), url: url('lock/settings')}] %}
+{% set fullPageForm = not readOnly %}
+{% if readOnly %}
+    {% set contentNotice = readOnlyNotice() %}
+{% endif %}
+
+{% block sidebar %}
+    {% include "lock/settings/_nav" with {selectedItem: 'retention'} only %}
+{% endblock %}
 
 {% block content %}
     {% include "lock/_partials/style" %}
 
-    {% if not isPro %}
-        <div class="lock-flag">{{ "Retention rules are a Pro feature. Rules written here are saved but will not run."|t('lock') }}</div>
+    {% if not readOnly %}
+        {{ actionInput('lock/settings/save') }}
+        {{ redirectInput('lock/settings/retention') }}
     {% endif %}
 
-    <div class="lock-flag">
-        {{ "Rules live in project config, not in a table. A rule that deletes personal data on a timer is a change to what the site does, so it arrives by deploy, reviewed, like every other one — which does mean it cannot be added on production with admin changes turned off."|t('lock') }}
-    </div>
+    {% if not isPro %}
+        <div class="readable"><blockquote class="note warning">{{ "Retention rules are a Pro feature. Rules written here are saved but will not run."|t('lock') }}</blockquote></div>
+    {% endif %}
 
-    <form method="post" accept-charset="UTF-8" data-saveshortcut>
-        {{ csrfInput() }}{{ actionInput('lock/settings/save') }}{{ redirectInput('lock/settings/retention') }}
+    <div class="readable"><blockquote class="note tip">
+        {{ "Rules live in project config, not in a table. A rule that deletes personal data on a timer is a change to what the site does, so it arrives by deploy, reviewed, like every other one. That does mean it cannot be added on production with admin changes turned off."|t('lock') }}
+    </blockquote></div>
 
-        {{ forms.editableTableField({
-            label: "Rules"|t('lock'),
-            instructions: "Each rule is a sentence: treat this kind of record this way once it is this old. The justification is what goes on the Article 30 register — a retention period with no reason behind it is a number somebody guessed."|t('lock'),
-            name: 'settings[retentionRules]',
-            id: 'retentionRules',
-            cols: {
-                key: {heading: "Key"|t('lock'), type: 'singleline', width: '12%'},
-                label: {heading: "Called"|t('lock'), type: 'singleline'},
-                scope: {heading: "Applies to"|t('lock'), type: 'select', options: scopeOptions},
-                period: {heading: "After"|t('lock'), type: 'number', width: '7%'},
-                unit: {heading: " ", type: 'select', options: units, width: '9%'},
-                mode: {heading: "Then"|t('lock'), type: 'select', options: modes, width: '11%'},
-                justification: {heading: "Because"|t('lock'), type: 'singleline'},
-                limit: {heading: "Max per run"|t('lock'), type: 'number', width: '8%'},
-                enabled: {heading: "On"|t('lock'), type: 'checkbox', width: '5%'},
-            },
-            rows: settings.retentionRules,
-            addRowLabel: "Add a rule"|t('lock'),
-            errors: settings.getErrors('retentionRules'),
-        }) }}
+    {{ forms.editableTableField({
+        label: "Rules"|t('lock'),
+        instructions: "Each rule is a sentence: treat this kind of record this way once it is this old. The justification is what goes on the Article 30 register. A retention period with no reason behind it is a number somebody guessed."|t('lock'),
+        name: 'settings[retentionRules]',
+        id: 'retentionRules',
+        cols: {
+            key: {heading: "Key"|t('lock'), type: 'singleline', width: '12%', code: true},
+            label: {heading: "Called"|t('lock'), type: 'singleline'},
+            scope: {heading: "Applies to"|t('lock'), type: 'select', options: scopeOptions},
+            period: {heading: "After"|t('lock'), type: 'number', width: '7%'},
+            unit: {heading: "Unit"|t('lock'), type: 'select', options: units, width: '9%'},
+            mode: {heading: "Then"|t('lock'), type: 'select', options: modes, width: '11%'},
+            justification: {heading: "Because"|t('lock'), type: 'singleline'},
+            limit: {heading: "Max per run"|t('lock'), type: 'number', width: '8%'},
+            enabled: {heading: "On"|t('lock'), type: 'lightswitch', width: '5%'},
+        },
+        rows: settings.retentionRules,
+        allowAdd: true,
+        allowDelete: true,
+        allowReorder: true,
+        addRowLabel: "Add a rule"|t('lock'),
+        static: readOnly,
+        errors: settings.getErrors('retentionRules'),
+    }) }}
 
-        <hr>
-        <h2>{{ "Scheduling"|t('lock') }}</h2>
+    <hr>
+    <h2>{{ "Scheduling"|t('lock') }}</h2>
 
-        {{ forms.lightswitchField({label: "Run rules automatically"|t('lock'), name: 'settings[scheduleEnabled]', on: settings.scheduleEnabled}) }}
-        {{ forms.selectField({
-            label: "Triggered by"|t('lock'),
-            instructions: "Cron is right. The web trigger fires from control panel traffic for sites with no cron, and only ever queues a job — nothing is deleted inside a page request."|t('lock'),
-            name: 'settings[scheduleTrigger]',
-            options: [{label: "Cron"|t('lock'), value: 'cron'}, {label: "Control panel traffic"|t('lock'), value: 'web'}],
-            value: settings.scheduleTrigger,
-        }) }}
-        {{ forms.selectField({label: "How often"|t('lock'), name: 'settings[scheduleFrequency]', options: [
-            {label: "Daily"|t('lock'), value: 'daily'}, {label: "Weekly"|t('lock'), value: 'weekly'}, {label: "Monthly"|t('lock'), value: 'monthly'},
-        ], value: settings.scheduleFrequency}) }}
-        {{ forms.textField({label: "At"|t('lock'), instructions: "24-hour, site time zone."|t('lock'), name: 'settings[scheduleTime]', size: 6, value: settings.scheduleTime, errors: settings.getErrors('scheduleTime')}) }}
-        {{ forms.lightswitchField({
-            label: "First run of a rule only reports"|t('lock'),
-            instructions: "The first thing a new rule that deletes things should do is tell you what it would have deleted."|t('lock'),
-            name: 'settings[retentionDryRunFirst]',
-            on: settings.retentionDryRunFirst,
-        }) }}
+    {{ forms.lightswitchField({
+        label: "Run rules automatically"|t('lock'),
+        id: 'scheduleEnabled',
+        name: 'settings[scheduleEnabled]',
+        on: settings.scheduleEnabled,
+        disabled: readOnly,
+    }) }}
+    {{ forms.selectField({
+        label: "Triggered by"|t('lock'),
+        instructions: "Cron is right. The web trigger fires from control panel traffic for sites with no cron, and only ever queues a job: nothing is deleted inside a page request."|t('lock'),
+        id: 'scheduleTrigger',
+        name: 'settings[scheduleTrigger]',
+        options: [{label: "Cron"|t('lock'), value: 'cron'}, {label: "Control panel traffic"|t('lock'), value: 'web'}],
+        value: settings.scheduleTrigger,
+        errors: settings.getErrors('scheduleTrigger'),
+        disabled: readOnly,
+    }) }}
+    {{ forms.selectField({
+        label: "How often"|t('lock'),
+        id: 'scheduleFrequency',
+        name: 'settings[scheduleFrequency]',
+        options: [
+            {label: "Daily"|t('lock'), value: 'daily'},
+            {label: "Weekly"|t('lock'), value: 'weekly'},
+            {label: "Monthly"|t('lock'), value: 'monthly'},
+        ],
+        value: settings.scheduleFrequency,
+        errors: settings.getErrors('scheduleFrequency'),
+        disabled: readOnly,
+    }) }}
+    {{ forms.textField({
+        label: "At"|t('lock'),
+        instructions: "24-hour, site time zone."|t('lock'),
+        id: 'scheduleTime',
+        name: 'settings[scheduleTime]',
+        value: settings.scheduleTime,
+        inputAttributes: {style: {width: '8em'}},
+        errors: settings.getErrors('scheduleTime'),
+        disabled: readOnly,
+    }) }}
+    {{ forms.lightswitchField({
+        label: "First run of a rule only reports"|t('lock'),
+        instructions: "The first thing a new rule that deletes things should do is tell you what it would have deleted."|t('lock'),
+        id: 'retentionDryRunFirst',
+        name: 'settings[retentionDryRunFirst]',
+        on: settings.retentionDryRunFirst,
+        disabled: readOnly,
+    }) }}
 
-        <h2>{{ "Available scopes"|t('lock') }}</h2>
+    <hr>
+    <h2>{{ "Available scopes"|t('lock') }}</h2>
 
+    {% if scopes|length %}
         <table class="data fullwidth">
-            <thead><tr><th>{{ "Key"|t('lock') }}</th><th>{{ "What"|t('lock') }}</th><th>{{ "Measured from"|t('lock') }}</th><th>{{ "Can be"|t('lock') }}</th></tr></thead>
+            <thead>
+                <tr>
+                    <th scope="col">{{ "Key"|t('lock') }}</th>
+                    <th scope="col">{{ "What"|t('lock') }}</th>
+                    <th scope="col">{{ "Measured from"|t('lock') }}</th>
+                    <th scope="col">{{ "Can be"|t('lock') }}</th>
+                </tr>
+            </thead>
             <tbody>
                 {% for scope in scopes %}
                     <tr>
@@ -81,15 +131,13 @@
                             {%- set can = [] -%}
                             {%- if scope.erasable %}{% set can = can|merge(["deleted"|t('lock')]) %}{% endif -%}
                             {%- if scope.anonymisable %}{% set can = can|merge(["anonymised"|t('lock')]) %}{% endif -%}
-                            {{ can|join(', ') }}
+                            {{ can ? can|join(', ') : lock.none("Only reported"|t('lock')) }}
                         </td>
                     </tr>
                 {% endfor %}
             </tbody>
         </table>
-
-        <div class="buttons">
-            <button type="submit" class="btn submit">{{ "Save"|t('lock') }}</button>
-        </div>
-    </form>
+    {% else %}
+        <p class="zilch small">{{ "No source offers a retention scope."|t('lock') }}</p>
+    {% endif %}
 {% endblock %}

@@ -1,3 +1,10 @@
+---
+title: Retention
+slug: retention
+order: 50
+summary: Pro. Rules that delete on a timer, why they live in project config, and how a sweep stays as careful as a hand-run erasure.
+---
+
 # Retention
 
 *Pro.*
@@ -57,10 +64,12 @@ the screen: it says which kinds of personal data currently have no expiry at all
 **It will not touch somebody with an open request.** Purging the data a person has just asked for
 a copy of would answer their request honestly and emptily. Nor anybody under a legal hold. Both
 are checked per record and reported as skips with the reason attached, so a run that touched
-nothing tells you *why* it touched nothing.
+nothing tells you *why* it touched nothing. A request nobody has confirmed does not count — anybody
+can type an address into the form, and that must not be enough to freeze somebody's data.
 
 **Its first real run reports instead of deleting.** The first thing a new rule that deletes things
-should do is tell you what it would have deleted. Run it again to apply it. (Switchable, but on by
+should do is tell you what it would have deleted. Only the first: the forced dry run counts as the
+rule's first run, so the next one applies it. (Switchable with `retentionDryRunFirst`, but on by
 default.)
 
 ## Running them
@@ -69,9 +78,18 @@ default.)
 php craft lock/retention/due                 # everything owed a run — put this on cron
 php craft lock/retention/due --dry-run
 php craft lock/retention/preview --rule=carts
-php craft lock/retention/run --rule=carts --force
+php craft lock/retention/run --rule=carts    # now, whether or not it is due
 php craft lock/retention/status              # rules, last runs, and what nothing covers
 ```
+
+On Lite every one of these exits with code 69 (`EX_UNAVAILABLE`) and says retention is a Pro
+feature, rather than exiting 0 and leaving a cron log that looks like success.
+
+Only one retention run happens at a time. `due`, `run` and the queued *Applying retention rules*
+job share a lock; a second one that starts while the first is going exits with code 75
+(`EX_TEMPFAIL`) or, as a job, skips. The job is never retried: a sweep that failed partway has
+already done what it did and recorded it, and the next scheduled occurrence picks up whatever is
+still owed.
 
 Due-ness is occurrence-based, not "has a day passed". A 3am purge stays at 3am rather than
 drifting an hour later every night until it lands in the working day — so running the command

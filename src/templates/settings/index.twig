@@ -1,140 +1,334 @@
 {% extends "_layouts/cp" %}
 {% import "_includes/forms" as forms %}
 
+{% set readOnly = readOnly ?? false %}
 {% set title = "Settings"|t('lock') %}
 {% set selectedSubnavItem = 'settings' %}
-{% set tabs = {
-    general: {label: "General"|t('lock'), url: url('lock/settings')},
-    collectors: {label: "Where to look"|t('lock'), url: url('lock/settings/collectors')},
-    retention: {label: "Retention rules"|t('lock'), url: url('lock/settings/retention')},
-} %}
-{% set selectedTab = 'general' %}
+{% set fullPageForm = not readOnly %}
+{% if readOnly %}
+    {% set contentNotice = readOnlyNotice() %}
+{% endif %}
+
+{% set numberInput = {style: {width: '8em'}} %}
+
+{% block sidebar %}
+    {% include "lock/settings/_nav" with {selectedItem: 'general'} only %}
+{% endblock %}
 
 {% block content %}
-    <form method="post" accept-charset="UTF-8" data-saveshortcut>
-        {{ csrfInput() }}{{ actionInput('lock/settings/save') }}{{ redirectInput('lock/settings') }}
+    {% if not readOnly %}
+        {{ actionInput('lock/settings/save') }}
+        {{ redirectInput('lock/settings') }}
+    {% endif %}
 
-        <h2>{{ "Who answers"|t('lock') }}</h2>
+    <h2>{{ "Who answers"|t('lock') }}</h2>
 
-        {{ forms.textField({first: true, label: "Organisation"|t('lock'), instructions: "The controller’s name, as it appears on correspondence and on the register."|t('lock'), name: 'settings[organisationName]', value: settings.organisationName}) }}
-        {{ forms.textField({label: "Responsible person"|t('lock'), name: 'settings[contactName]', value: settings.contactName}) }}
-        {{ forms.autosuggestField({label: "Contact address"|t('lock'), instructions: "Where a subject can reach a human. Falls back to the system email address."|t('lock'), name: 'settings[contactEmail]', value: settings.contactEmail, suggestEnvVars: true}) }}
-        {{ forms.autosuggestField({label: "Privacy policy URL"|t('lock'), name: 'settings[policyUrl]', value: settings.policyUrl, suggestEnvVars: true}) }}
-        {{ forms.textField({label: "Staff notified"|t('lock'), instructions: "Comma separated. Falls back to the contact address."|t('lock'), name: 'settings[staffRecipients]', value: settings.staffRecipients|join(', ')}) }}
+    {{ forms.textField({
+        first: true,
+        label: "Organisation"|t('lock'),
+        instructions: "The controller’s name, as it appears on correspondence and on the register."|t('lock'),
+        id: 'organisationName',
+        name: 'settings[organisationName]',
+        value: settings.organisationName,
+        errors: settings.getErrors('organisationName'),
+        disabled: readOnly,
+    }) }}
+    {{ forms.textField({
+        label: "Responsible person"|t('lock'),
+        id: 'contactName',
+        name: 'settings[contactName]',
+        value: settings.contactName,
+        errors: settings.getErrors('contactName'),
+        disabled: readOnly,
+    }) }}
+    {{ forms.autosuggestField({
+        label: "Contact address"|t('lock'),
+        instructions: "Where a subject can reach a human. Falls back to the system email address."|t('lock'),
+        id: 'contactEmail',
+        name: 'settings[contactEmail]',
+        value: settings.contactEmail,
+        suggestEnvVars: true,
+        errors: settings.getErrors('contactEmail'),
+        disabled: readOnly,
+    }) }}
+    {{ forms.autosuggestField({
+        label: "Privacy policy URL"|t('lock'),
+        id: 'policyUrl',
+        name: 'settings[policyUrl]',
+        value: settings.policyUrl,
+        suggestEnvVars: true,
+        errors: settings.getErrors('policyUrl'),
+        disabled: readOnly,
+    }) }}
+    {{ forms.textField({
+        label: "Staff notified"|t('lock'),
+        instructions: "Comma separated. Falls back to the contact address."|t('lock'),
+        id: 'staffRecipients',
+        name: 'settings[staffRecipients]',
+        value: settings.staffRecipients|join(', '),
+        errors: settings.getErrors('staffRecipients'),
+        disabled: readOnly,
+    }) }}
 
-        <hr>
-        <h2>{{ "Deadlines"|t('lock') }}</h2>
+    <hr>
+    <h2>{{ "Deadlines"|t('lock') }}</h2>
 
-        {{ forms.textField({label: "Days to answer"|t('lock'), instructions: "Article 12(3) says “one month”. Thirty days is the safe reading of it."|t('lock'), name: 'settings[responseDays]', type: 'number', size: 4, value: settings.responseDays}) }}
-        {{ forms.textField({label: "Extension available"|t('lock'), instructions: "Extra days for a complex request. Has to be claimed, and the subject told why."|t('lock'), name: 'settings[extensionDays]', type: 'number', size: 4, value: settings.extensionDays}) }}
-        {{ forms.textField({label: "Remind staff at"|t('lock'), instructions: "Days remaining, comma separated. Two nudges beats one: the first is “start it”, the second is “it is late tomorrow”."|t('lock'), name: 'settings[reminderDays]', value: settings.reminderDays|join(', ')}) }}
-        {{ forms.lightswitchField({
-            label: "Start the clock on receipt"|t('lock'),
-            instructions: "On, the deadline counts from when the request arrived. Off, from when the subject confirmed their identity — which is permitted, and is also a clock a subject can leave stopped forever."|t('lock'),
-            name: 'settings[clockStartsOnReceipt]',
-            on: settings.clockStartsOnReceipt,
-        }) }}
+    {{ forms.textField({
+        label: "Days to answer"|t('lock'),
+        instructions: "Article 12(3) says “one month”. Thirty days is the safe reading of it."|t('lock'),
+        id: 'responseDays',
+        name: 'settings[responseDays]',
+        type: 'number',
+        value: settings.responseDays,
+        inputAttributes: numberInput,
+        errors: settings.getErrors('responseDays'),
+        disabled: readOnly,
+    }) }}
+    {{ forms.textField({
+        label: "Extension available"|t('lock'),
+        instructions: "Extra days for a complex request. Has to be claimed, and the subject told why."|t('lock'),
+        id: 'extensionDays',
+        name: 'settings[extensionDays]',
+        type: 'number',
+        value: settings.extensionDays,
+        inputAttributes: numberInput,
+        errors: settings.getErrors('extensionDays'),
+        disabled: readOnly,
+    }) }}
+    {{ forms.textField({
+        label: "Remind staff at"|t('lock'),
+        instructions: "Days remaining, comma separated. Two nudges beats one: the first is “start it”, the second is “it is late tomorrow”."|t('lock'),
+        id: 'reminderDays',
+        name: 'settings[reminderDays]',
+        value: settings.reminderDays|join(', '),
+        errors: settings.getErrors('reminderDays'),
+        disabled: readOnly,
+    }) }}
+    {{ forms.lightswitchField({
+        label: "Start the clock on receipt"|t('lock'),
+        instructions: "On, the deadline counts from when the request arrived. Off, from when the subject confirmed their identity, which is permitted, and is also a clock a subject can leave stopped forever."|t('lock'),
+        id: 'clockStartsOnReceipt',
+        name: 'settings[clockStartsOnReceipt]',
+        on: settings.clockStartsOnReceipt,
+        disabled: readOnly,
+    }) }}
 
-        <hr>
-        <h2>{{ "The front door"|t('lock') }}</h2>
+    <hr>
+    <h2>{{ "The front door"|t('lock') }}</h2>
 
-        {{ forms.lightswitchField({label: "Accept requests from the site"|t('lock'), name: 'settings[intakeEnabled]', on: settings.intakeEnabled}) }}
-        {{ forms.checkboxGroupField({
-            label: "Types the public form may submit"|t('lock'),
-            name: 'settings[intakeTypes]',
-            options: requestTypes|keys|map(k => {label: requestTypes[k], value: k}),
-            values: settings.intakeTypes,
-        }) }}
-        {{ forms.lightswitchField({
-            label: "Confirm by email first"|t('lock'),
-            instructions: "Strongly recommended. An unverified erasure request is a way to delete somebody else’s account by typing their address into a form."|t('lock'),
-            name: 'settings[requireVerification]',
-            on: settings.requireVerification,
-        }) }}
-        {{ forms.textField({label: "Link valid for (hours)"|t('lock'), name: 'settings[verificationTtl]', type: 'number', size: 4, value: settings.verificationTtl}) }}
-        {{ forms.textField({label: "Requests per hour"|t('lock'), instructions: "Per address and per IP. 0 disables the limit."|t('lock'), name: 'settings[intakeRateLimit]', type: 'number', size: 4, value: settings.intakeRateLimit}) }}
-        {{ forms.lightswitchField({label: "Trust a signed-in subject"|t('lock'), instructions: "Skips confirmation when somebody asks about the address they are signed in with."|t('lock'), name: 'settings[trustSignedInSubjects]', on: settings.trustSignedInSubjects}) }}
+    {{ forms.lightswitchField({
+        label: "Accept requests from the site"|t('lock'),
+        id: 'intakeEnabled',
+        name: 'settings[intakeEnabled]',
+        on: settings.intakeEnabled,
+        disabled: readOnly,
+    }) }}
+    {{ forms.checkboxGroupField({
+        label: "Types the public form may submit"|t('lock'),
+        id: 'intakeTypes',
+        name: 'settings[intakeTypes]',
+        options: requestTypes|keys|map(k => {label: requestTypes[k], value: k}),
+        values: settings.intakeTypes,
+        errors: settings.getErrors('intakeTypes'),
+        disabled: readOnly,
+    }) }}
+    {{ forms.lightswitchField({
+        label: "Confirm by email first"|t('lock'),
+        instructions: "Strongly recommended. An unverified erasure request is a way to delete somebody else’s account by typing their address into a form."|t('lock'),
+        id: 'requireVerification',
+        name: 'settings[requireVerification]',
+        on: settings.requireVerification,
+        disabled: readOnly,
+    }) }}
+    {{ forms.textField({
+        label: "Link valid for (hours)"|t('lock'),
+        id: 'verificationTtl',
+        name: 'settings[verificationTtl]',
+        type: 'number',
+        value: settings.verificationTtl,
+        inputAttributes: numberInput,
+        errors: settings.getErrors('verificationTtl'),
+        disabled: readOnly,
+    }) }}
+    {{ forms.textField({
+        label: "Requests per hour"|t('lock'),
+        instructions: "Per address and per IP. 0 disables the limit."|t('lock'),
+        id: 'intakeRateLimit',
+        name: 'settings[intakeRateLimit]',
+        type: 'number',
+        value: settings.intakeRateLimit,
+        inputAttributes: numberInput,
+        errors: settings.getErrors('intakeRateLimit'),
+        disabled: readOnly,
+    }) }}
+    {{ forms.lightswitchField({
+        label: "Trust a signed-in subject"|t('lock'),
+        instructions: "Skips confirmation when somebody asks about the address they are signed in with."|t('lock'),
+        id: 'trustSignedInSubjects',
+        name: 'settings[trustSignedInSubjects]',
+        on: settings.trustSignedInSubjects,
+        disabled: readOnly,
+    }) }}
 
-        <hr>
-        <h2>{{ "Anonymise or erase"|t('lock') }}</h2>
+    <hr>
+    <h2>{{ "Anonymise or erase"|t('lock') }}</h2>
 
-        {{ forms.selectField({
-            label: "What “delete me” means by default"|t('lock'),
-            instructions: "Anonymising keeps the record and destroys the person in it, which is what lets a completed order stay a valid tax record while ceasing to be about anybody."|t('lock'),
-            name: 'settings[defaultMode]',
-            options: [{label: "Anonymise where possible"|t('lock'), value: 'anonymise'}, {label: "Delete where possible"|t('lock'), value: 'erase'}],
-            value: settings.defaultMode,
-        }) }}
-        {{ forms.textField({label: "Replacement name"|t('lock'), name: 'settings[anonymousName]', value: settings.anonymousName}) }}
-        {{ forms.textField({
-            label: "Replacement domain"|t('lock'),
-            instructions: "Used to build the address an anonymised record gets. RFC 2606 reserves .invalid precisely so it can never be delivered to or registered by anyone."|t('lock'),
-            name: 'settings[anonymousDomain]',
-            value: settings.anonymousDomain,
-        }) }}
-        {{ forms.lightswitchField({
-            label: "Keep a suppression entry"|t('lock'),
-            instructions: "Stores a keyed hash of an erased address so the same person cannot be silently re-imported next week. Article 17 contemplates this: you need it in order to honour the erasure."|t('lock'),
-            name: 'settings[suppressAfterErasure]',
-            on: settings.suppressAfterErasure,
-        }) }}
-        {{ forms.lightswitchField({label: "Back up the database first"|t('lock'), name: 'settings[backupBeforeErasure]', on: settings.backupBeforeErasure}) }}
-        {{ forms.lightswitchField({label: "Open requests and holds block automatic purging"|t('lock'), name: 'settings[holdBlocksRetention]', on: settings.holdBlocksRetention}) }}
+    {{ forms.selectField({
+        label: "What “delete me” means by default"|t('lock'),
+        instructions: "Anonymising keeps the record and destroys the person in it, which is what lets a completed order stay a valid tax record while ceasing to be about anybody."|t('lock'),
+        id: 'defaultMode',
+        name: 'settings[defaultMode]',
+        options: [{label: "Anonymise where possible"|t('lock'), value: 'anonymise'}, {label: "Delete where possible"|t('lock'), value: 'erase'}],
+        value: settings.defaultMode,
+        errors: settings.getErrors('defaultMode'),
+        disabled: readOnly,
+    }) }}
+    {{ forms.textField({
+        label: "Replacement name"|t('lock'),
+        id: 'anonymousName',
+        name: 'settings[anonymousName]',
+        value: settings.anonymousName,
+        errors: settings.getErrors('anonymousName'),
+        disabled: readOnly,
+    }) }}
+    {{ forms.textField({
+        label: "Replacement domain"|t('lock'),
+        instructions: "Used to build the address an anonymised record gets. RFC 2606 reserves .invalid precisely so it can never be delivered to or registered by anyone."|t('lock'),
+        id: 'anonymousDomain',
+        name: 'settings[anonymousDomain]',
+        value: settings.anonymousDomain,
+        errors: settings.getErrors('anonymousDomain'),
+        disabled: readOnly,
+    }) }}
+    {{ forms.lightswitchField({
+        label: "Keep a suppression entry"|t('lock'),
+        instructions: "Stores a keyed hash of an erased address so the same person cannot be silently re-imported next week. Article 17 contemplates this: you need it in order to honour the erasure."|t('lock'),
+        id: 'suppressAfterErasure',
+        name: 'settings[suppressAfterErasure]',
+        on: settings.suppressAfterErasure,
+        disabled: readOnly,
+    }) }}
+    {{ forms.lightswitchField({
+        label: "Back up the database first"|t('lock'),
+        id: 'backupBeforeErasure',
+        name: 'settings[backupBeforeErasure]',
+        on: settings.backupBeforeErasure,
+        disabled: readOnly,
+    }) }}
+    {{ forms.lightswitchField({
+        label: "Open requests and holds block automatic purging"|t('lock'),
+        id: 'holdBlocksRetention',
+        name: 'settings[holdBlocksRetention]',
+        on: settings.holdBlocksRetention,
+        disabled: readOnly,
+    }) }}
 
-        <hr>
-        <h2>{{ "Disclosures"|t('lock') }}</h2>
+    <hr>
+    <h2>{{ "Disclosures"|t('lock') }}</h2>
 
-        {{ forms.textField({
-            label: "Keep built archives for (days)"|t('lock'),
-            instructions: "A dossier is the most concentrated personal data on the whole site — one file with everything about one person in it. Leaving them in storage indefinitely makes Lock the biggest data protection problem on the site."|t('lock'),
-            name: 'settings[dossierTtl]',
-            type: 'number',
-            size: 4,
-            value: settings.dossierTtl,
-        }) }}
-        {{ forms.lightswitchField({label: "Encrypt the archive"|t('lock'), instructions: "AES-256, with a password shown to you once and never stored."|t('lock'), name: 'settings[protectDossier]', on: settings.protectDossier}) }}
+    {{ forms.textField({
+        label: "Keep built archives for (days)"|t('lock'),
+        instructions: "A dossier is the most concentrated personal data on the whole site: one file with everything about one person in it. Leaving them in storage indefinitely makes Lock the biggest data protection problem on the site."|t('lock'),
+        id: 'dossierTtl',
+        name: 'settings[dossierTtl]',
+        type: 'number',
+        value: settings.dossierTtl,
+        inputAttributes: numberInput,
+        errors: settings.getErrors('dossierTtl'),
+        disabled: readOnly,
+    }) }}
+    {{ forms.lightswitchField({
+        label: "Encrypt the archive"|t('lock'),
+        instructions: "AES-256, with a password shown to you once and never stored."|t('lock'),
+        id: 'protectDossier',
+        name: 'settings[protectDossier]',
+        on: settings.protectDossier,
+        disabled: readOnly,
+    }) }}
 
-        <hr>
-        <h2>{{ "Consent"|t('lock') }}</h2>
+    <hr>
+    <h2>{{ "Consent"|t('lock') }}</h2>
 
-        {{ forms.editableTableField({
-            label: "Purposes"|t('lock'),
-            instructions: "What consent can be given for. Consent records are keyed by the key, so renaming one orphans its history."|t('lock'),
-            name: 'settings[consentPurposes]',
-            id: 'consentPurposes',
-            cols: {
-                key: {heading: "Key"|t('lock'), type: 'singleline', width: '20%'},
-                label: {heading: "Label"|t('lock'), type: 'singleline'},
-                description: {heading: "Description"|t('lock'), type: 'singleline'},
-                basis: {heading: "Basis"|t('lock'), type: 'singleline', width: '15%'},
-            },
-            rows: settings.consentPurposes,
-            addRowLabel: "Add a purpose"|t('lock'),
-            errors: settings.getErrors('consentPurposes'),
-        }) }}
+    {{ forms.editableTableField({
+        label: "Purposes"|t('lock'),
+        instructions: "What consent can be given for. Consent records are keyed by the key, so renaming one orphans its history."|t('lock'),
+        name: 'settings[consentPurposes]',
+        id: 'consentPurposes',
+        cols: {
+            key: {heading: "Key"|t('lock'), type: 'singleline', width: '20%', code: true},
+            label: {heading: "Label"|t('lock'), type: 'singleline'},
+            description: {heading: "Description"|t('lock'), type: 'singleline'},
+            basis: {heading: "Basis"|t('lock'), type: 'singleline', width: '15%'},
+        },
+        rows: settings.consentPurposes,
+        allowAdd: true,
+        allowDelete: true,
+        allowReorder: true,
+        addRowLabel: "Add a purpose"|t('lock'),
+        static: readOnly,
+        errors: settings.getErrors('consentPurposes'),
+    }) }}
 
-        {{ forms.textField({label: "Re-ask after (months)"|t('lock'), instructions: "Consent does not expire in law, but consent given years ago to different wording is hard to rely on. 0 never expires."|t('lock'), name: 'settings[consentExpiryMonths]', type: 'number', size: 4, value: settings.consentExpiryMonths}) }}
-        {{ forms.lightswitchField({label: "Include Toss’s records"|t('lock'), instructions: "Reads cookie decisions and policy acceptances recorded by Toss into disclosures."|t('lock'), name: 'settings[adoptToss]', on: settings.adoptToss}) }}
+    {{ forms.textField({
+        label: "Re-ask after (months)"|t('lock'),
+        instructions: "Consent does not expire in law, but consent given years ago to different wording is hard to rely on. 0 never expires."|t('lock'),
+        id: 'consentExpiryMonths',
+        name: 'settings[consentExpiryMonths]',
+        type: 'number',
+        value: settings.consentExpiryMonths,
+        inputAttributes: numberInput,
+        errors: settings.getErrors('consentExpiryMonths'),
+        disabled: readOnly,
+    }) }}
+    {{ forms.lightswitchField({
+        label: "Include Toss’s records"|t('lock'),
+        instructions: "Reads cookie decisions and policy acceptances recorded by Toss into disclosures."|t('lock'),
+        id: 'adoptToss',
+        name: 'settings[adoptToss]',
+        on: settings.adoptToss,
+        disabled: readOnly,
+    }) }}
 
-        <hr>
-        <h2>{{ "Notifications and logging"|t('lock') }}</h2>
+    <hr>
+    <h2>{{ "Notifications and logging"|t('lock') }}</h2>
 
-        {{ forms.lightswitchField({label: "Email the subject"|t('lock'), name: 'settings[notifySubject]', on: settings.notifySubject}) }}
-        {{ forms.lightswitchField({label: "Email staff"|t('lock'), name: 'settings[notifyStaff]', on: settings.notifyStaff}) }}
-        {{ forms.selectField({label: "Log level"|t('lock'), name: 'settings[logLevel]', options: [
-            {label: 'debug', value: 'debug'}, {label: 'info', value: 'info'}, {label: 'warning', value: 'warning'}, {label: 'error', value: 'error'},
-        ], value: settings.logLevel}) }}
-        {{ forms.textField({
-            label: "Keep the ledger for (days)"|t('lock'),
-            instructions: "0 keeps it forever, which is the default. The ledger is the evidence that the plugin did what it says, and evidence that expires before the limitation period is not evidence."|t('lock'),
-            name: 'settings[activityRetentionDays]',
-            type: 'number',
-            size: 4,
-            value: settings.activityRetentionDays,
-        }) }}
-
-        <div class="buttons">
-            <button type="submit" class="btn submit">{{ "Save"|t('lock') }}</button>
-        </div>
-    </form>
+    {{ forms.lightswitchField({
+        label: "Email the subject"|t('lock'),
+        id: 'notifySubject',
+        name: 'settings[notifySubject]',
+        on: settings.notifySubject,
+        disabled: readOnly,
+    }) }}
+    {{ forms.lightswitchField({
+        label: "Email staff"|t('lock'),
+        id: 'notifyStaff',
+        name: 'settings[notifyStaff]',
+        on: settings.notifyStaff,
+        disabled: readOnly,
+    }) }}
+    {{ forms.selectField({
+        label: "Log level"|t('lock'),
+        id: 'logLevel',
+        name: 'settings[logLevel]',
+        options: [
+            {label: "Debug"|t('lock'), value: 'debug'},
+            {label: "Info"|t('lock'), value: 'info'},
+            {label: "Warning"|t('lock'), value: 'warning'},
+            {label: "Error"|t('lock'), value: 'error'},
+        ],
+        value: settings.logLevel,
+        errors: settings.getErrors('logLevel'),
+        disabled: readOnly,
+    }) }}
+    {{ forms.textField({
+        label: "Keep the ledger for (days)"|t('lock'),
+        instructions: "0 keeps it forever, which is the default. The ledger is the evidence that the plugin did what it says, and evidence that expires before the limitation period is not evidence."|t('lock'),
+        id: 'activityRetentionDays',
+        name: 'settings[activityRetentionDays]',
+        type: 'number',
+        value: settings.activityRetentionDays,
+        inputAttributes: numberInput,
+        errors: settings.getErrors('activityRetentionDays'),
+        disabled: readOnly,
+    }) }}
 {% endblock %}

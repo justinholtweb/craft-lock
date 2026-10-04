@@ -1,4 +1,5 @@
 {% extends "_layouts/cp" %}
+{% import "lock/_partials/macros" as lock %}
 
 {% set title = "Run history"|t('lock') %}
 {% set selectedSubnavItem = 'retention' %}
@@ -11,39 +12,49 @@
         {{ "Every run keeps the plan it was given and the outcome it produced, side by side, so that “exactly what the preview said” is something anyone can check afterwards rather than something the plugin asserts."|t('lock') }}
     </p>
 
-    <table class="data fullwidth">
-        <thead>
-            <tr>
-                <th>{{ "When"|t('lock') }}</th>
-                <th>{{ "What"|t('lock') }}</th>
-                <th>{{ "Result"|t('lock') }}</th>
-                <th>{{ "Deleted"|t('lock') }}</th>
-                <th>{{ "Anonymised"|t('lock') }}</th>
-                <th>{{ "Kept"|t('lock') }}</th>
-                <th>{{ "Failed"|t('lock') }}</th>
-                <th>{{ "Took"|t('lock') }}</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for run in runs %}
+    {% if runs|length %}
+        <table class="data fullwidth">
+            <thead>
                 <tr>
-                    <td class="thin">{{ run.dateCreated|datetime('short') }}</td>
-                    <td>
-                        {{ run.ruleKey ?? run.subjectEmail ?? run.type }}
-                        {% if run.dryRun %}<span class="lock-action lock-action-skip">{{ "dry run"|t('lock') }}</span>{% endif %}
-                        {% if run.scheduled %}<span class="lock-action lock-action-skip">{{ "scheduled"|t('lock') }}</span>{% endif %}
-                        <div class="light">{{ run.summary }}</div>
-                    </td>
-                    <td>{{ run.status }}</td>
-                    <td>{{ run.erased }}</td>
-                    <td>{{ run.anonymised }}</td>
-                    <td>{{ run.skipped }}</td>
-                    <td{% if run.failed %} class="error"{% endif %}>{{ run.failed }}</td>
-                    <td class="light">{{ run.duration }}s</td>
+                    <th scope="col">{{ "When"|t('lock') }}</th>
+                    <th scope="col">{{ "What"|t('lock') }}</th>
+                    <th scope="col">{{ "Result"|t('lock') }}</th>
+                    <th scope="col">{{ "Deleted"|t('lock') }}</th>
+                    <th scope="col">{{ "Anonymised"|t('lock') }}</th>
+                    <th scope="col">{{ "Kept"|t('lock') }}</th>
+                    <th scope="col">{{ "Failed"|t('lock') }}</th>
+                    <th scope="col">{{ "Took"|t('lock') }}</th>
                 </tr>
-            {% else %}
-                <tr><td colspan="8" class="light">{{ "Nothing has run yet."|t('lock') }}</td></tr>
-            {% endfor %}
-        </tbody>
-    </table>
+            </thead>
+            <tbody>
+                {% for run in runs %}
+                    <tr>
+                        <td class="thin">{{ run.dateCreated|datetime('short') }}</td>
+                        <td>
+                            {# Never the address: a run about one person is identified by its
+                               request, and the ledger only ever holds a hash of who it was. #}
+                            {% if run.ruleKey %}
+                                <code>{{ run.ruleKey }}</code>
+                            {% else %}
+                                {{ lock.runType(run.type) }}
+                                {% if run.subjectLabel %}<span class="light">· {{ lock.subject(run) }}</span>{% endif %}
+                            {% endif %}
+                            {% if run.dryRun %}<span class="light">· {{ "dry run"|t('lock') }}</span>{% endif %}
+                            {% if run.scheduled %}<span class="light">· {{ "scheduled"|t('lock') }}</span>{% endif %}
+                            {% if run.summary %}<div class="light">{{ run.summary }}</div>{% endif %}
+                        </td>
+                        <td>{{ lock.runStatus(run.status) }}</td>
+                        <td>{{ run.erased }}</td>
+                        <td>{{ run.anonymised }}</td>
+                        <td>{{ run.skipped }}</td>
+                        <td{% if run.failed %} class="error"{% endif %}>{{ run.failed }}</td>
+                        <td class="light">{{ "{n}s"|t('lock', {n: run.duration}) }}</td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {{ lock.capped(runs, 200) }}
+    {% else %}
+        <p class="zilch small">{{ "Nothing has run yet."|t('lock') }}</p>
+    {% endif %}
 {% endblock %}

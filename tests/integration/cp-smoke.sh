@@ -110,6 +110,15 @@ else
   fail=1
 fi
 
+# No reference in the answer: it would only be there when the submission landed, which makes its
+# presence an oracle of its own.
+if echo "$BODY" | grep -q '"reference"'; then
+  echo "  ✗ the answer carries a reference, so it differs between outcomes"
+  fail=1
+else
+  echo "  ✓ the answer carries no reference"
+fi
+
 # The honeypot must produce the *same* answer, and no request. A different answer is an oracle.
 HONEY=$(curl -s -b /tmp/lock-intake.txt -H "Host: plugin-testing.ddev.site" -H "Accept: application/json" \
   -d "action=lock/portal/submit&email=honeypot@lock-test.invalid&type=access&confirmEmail=bot&CRAFT_CSRF_TOKEN=$ICSRF" "$BASE/index.php")

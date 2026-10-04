@@ -19,6 +19,7 @@ use justinholtweb\lock\models\Subject;
 use justinholtweb\lock\Plugin;
 use justinholtweb\lock\records\ActivityRecord;
 use justinholtweb\lock\records\RunRecord;
+use yii\base\InvalidCallException;
 
 /**
  * Storage limitation, made to actually happen.
@@ -36,7 +37,7 @@ use justinholtweb\lock\records\RunRecord;
 class Retention extends Component
 {
     /** @return RetentionRule[] keyed by rule key */
-    public function rules(): array
+    public function allRules(): array
     {
         /** @var Settings $settings */
         $settings = Plugin::getInstance()->getSettings();
@@ -55,13 +56,13 @@ class Retention extends Component
 
     public function rule(string $key): ?RetentionRule
     {
-        return $this->rules()[$key] ?? null;
+        return $this->allRules()[$key] ?? null;
     }
 
     /** @return RetentionRule[] */
     public function enabledRules(): array
     {
-        return array_filter($this->rules(), static fn(RetentionRule $r) => $r->enabled);
+        return array_filter($this->allRules(), static fn(RetentionRule $r) => $r->enabled);
     }
 
     /**
@@ -151,14 +152,23 @@ class Retention extends Component
      *
      * The first run of a rule is forced to be a dry run when `retentionDryRunFirst` is on, which
      * it is by default — the first thing a new rule that deletes things should do is tell you what
-     * it would have deleted.
+     * it would have deleted. *Only* the first: "has this rule ever run" counts the dry run it was
+     * forced into, or the guard would force every run after it to be dry as well and the rule
+     * would never delete anything.
+     *
+     * @throws InvalidCallException on Lite. The controllers and the console refuse first; this is
+     *         the backstop for a queued job or a module that calls the service directly.
      */
     public function run(RetentionRule $rule, bool $dryRun = false, bool $scheduled = false): ErasureOutcome
     {
+        if (!Plugin::getInstance()->isPro()) {
+            throw new InvalidCallException(Craft::t('lock', 'Retention rules are a Pro feature.'));
+        }
+
         /** @var Settings $settings */
         $settings = Plugin::getInstance()->getSettings();
 
-        if (!$dryRun && $settings->retentionDryRunFirst && !$this->hasEverRun($rule->key)) {
+        if (!$dryRun && $settings->retentionDryRunFirst && !$this->hasEverRun($rule->key, true)) {
             $dryRun = true;
 
             Craft::info("Lock: first run of retention rule “{$rule->key}” forced to a dry run.", Plugin::LOG_CATEGORY);
@@ -176,6 +186,10 @@ class Retention extends Component
      */
     public function runDue(bool $dryRun = false, ?DateTime $now = null): array
     {
+        if (!Plugin::getInstance()->isPro()) {
+            return [];
+        }
+
         $outcomes = [];
 
         foreach ($this->enabledRules() as $key => $rule) {
@@ -197,9 +211,21 @@ class Retention extends Component
         return $outcomes;
     }
 
-    public function hasEverRun(string $ruleKey): bool
+    /**
+     * Whether a rule has run before — for real only, or counting dry runs too.
+     *
+     * The dry-run-first guard asks with `$includeDryRuns`: what it wants to know is whether the
+     * rule has ever *reported*, not whether it has ever deleted.
+     */
+    public function hasEverRun(string $ruleKey, bool $includeDryRuns = false): bool
     {
-        return RunRecord::find()->where(['ruleKey' => $ruleKey, 'dryRun' => false])->exists();
+        $query = RunRecord::find()->where(['ruleKey' => $ruleKey]);
+
+        if (!$includeDryRuns) {
+            $query->andWhere(['dryRun' => false]);
+        }
+
+        return $query->exists();
     }
 
     public function lastRun(string $ruleKey, bool $includeDryRuns = false): ?DateTime
@@ -272,7 +298,10 @@ class Retention extends Component
             $query->andWhere(['ruleKey' => $ruleKey]);
         }
 
-        return $query->all();
+        /** @var RunRecord[] $runs */
+        $runs = $query->all();
+
+        return $runs;
     }
 
     /**
@@ -288,7 +317,7 @@ class Retention extends Component
     {
         $covered = [];
 
-        foreach ($this->rules() as $rule) {
+        foreach ($this->allRules() as $rule) {
             $covered[$rule->scope] = true;
         }
 

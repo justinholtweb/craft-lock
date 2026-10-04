@@ -5,6 +5,7 @@ namespace justinholtweb\lock\collectors;
 use Craft;
 use craft\helpers\FileHelper;
 use DateTime;
+use justinholtweb\lock\helpers\Address;
 use justinholtweb\lock\models\Bundle;
 use justinholtweb\lock\models\DataRecord;
 use justinholtweb\lock\models\ErasureTarget;
@@ -88,7 +89,9 @@ class LogCollector extends BaseCollector
                     break;
                 }
 
-                if (stripos($line, $email) === false) {
+                // A bounded match, not `stripos`, so that a line about `alex@corp.com` is not
+                // disclosed to `lex@corp.co`.
+                if (!Address::contains($line, $email)) {
                     continue;
                 }
 

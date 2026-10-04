@@ -27,10 +27,29 @@ class ReportController extends Controller
     }
 
     /**
+     * The register is Pro. A non-zero exit rather than an empty answer: `gaps` runs in CI, and on
+     * Lite "no gaps" would be a green build about a register that does not exist.
+     */
+    private function refuseOnLite(): ?int
+    {
+        if (Plugin::getInstance()->isPro()) {
+            return null;
+        }
+
+        $this->stderr("The record of processing activities is a Pro feature.\n", Console::FG_RED);
+
+        return ExitCode::UNAVAILABLE;
+    }
+
+    /**
      * Lists what the register is missing. Exits non-zero when there is anything, so CI can fail.
      */
     public function actionGaps(): int
     {
+        if (($refused = $this->refuseOnLite()) !== null) {
+            return $refused;
+        }
+
         $gaps = Plugin::getInstance()->register->gaps();
 
         if ($this->json) {
@@ -55,6 +74,10 @@ class ReportController extends Controller
     /** The whole Article 30 register as JSON. */
     public function actionRegister(): int
     {
+        if (($refused = $this->refuseOnLite()) !== null) {
+            return $refused;
+        }
+
         $this->stdout(Json::encode(Plugin::getInstance()->register->report(), JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . "\n");
 
         return ExitCode::OK;
@@ -82,7 +105,7 @@ class ReportController extends Controller
                 $plugin->collectors->enabled(),
             ),
             'retention' => [
-                'rules' => count($plugin->retention->rules()),
+                'rules' => count($plugin->retention->allRules()),
                 'enabled' => count($plugin->retention->enabledRules()),
                 'uncovered' => array_keys($plugin->retention->uncoveredScopes()),
             ],

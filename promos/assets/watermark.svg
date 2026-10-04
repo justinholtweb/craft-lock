@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100" role="img" aria-label="">
+    <!--
+        Oversized background mark for the promo slides, drawn at ~5% opacity.
+
+        Two things it deliberately is not. It is not the app icon: the icon's tile is a solid
+        rounded square that, blown up to 1180px and faded, reads as a hard-edged box across the
+        slide rather than as a watermark. And it is not the icon's line art either: outlines that
+        thin vanish at 5% opacity and leave an empty slide.
+
+        So this is the padlock from src/icon-mask.svg filled in — the two shackle arches merged into
+        one band, the body solid with only the keyhole punched through. Same outer geometry as the
+        icon; keep the two in step if either changes.
+    -->
+    <path fill="#FFFCEF" d="M31 46V36a19 19 0 0 1 38 0v10h-12.2V36a6.8 6.8 0 0 0-13.6 0v10z"/>
+    <path fill="#FFFCEF" fill-rule="evenodd" d="M30 44h40a6 6 0 0 1 6 6v30a6 6 0 0 1-6 6H30a6 6 0 0 1-6-6V50a6 6 0 0 1 6-6zM45.6 66.6a7 7 0 1 1 8.8 0L56.9 77.6H43.1z"/>
+</svg>

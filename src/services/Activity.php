@@ -7,6 +7,7 @@ use craft\base\Component;
 use craft\db\Query;
 use craft\helpers\Db;
 use DateTime;
+use justinholtweb\lock\helpers\Address;
 use justinholtweb\lock\models\Subject;
 use justinholtweb\lock\Plugin;
 use justinholtweb\lock\records\ActivityRecord;
@@ -38,12 +39,22 @@ class Activity extends Component
         array $data = [],
     ): void {
         try {
+            $email = $subject?->normalisedEmail() ?? '';
+
+            // The subject is recorded as a keyed hash and never as an address. The ledger is
+            // append-only, so an address written here could not be taken back out by the erasure
+            // the line records. Callers should not put one in the summary either; this is the
+            // backstop for the one that does.
+            if ($email !== '') {
+                $summary = $summary !== null ? Address::replace($summary, $email, '[address]') : null;
+                $data = Address::replaceDeep($data, $email, '[address]');
+            }
+
             $record = new ActivityRecord();
             $record->category = $category;
             $record->action = $action;
             $record->summary = $summary;
-            $record->subjectEmail = $subject?->normalisedEmail();
-            $record->subjectHash = $subject !== null && $subject->normalisedEmail() !== '' ? $subject->emailHash() : null;
+            $record->subjectHash = $email !== '' ? $subject?->emailHash() : null;
             $record->requestId = $requestId;
             $record->data = $data === [] ? null : $data;
             $record->userId = Craft::$app->getUser()->getId();
@@ -90,7 +101,10 @@ class Activity extends Component
             $query->andWhere(['subjectHash' => $subjectHash]);
         }
 
-        return $query->all();
+        /** @var ActivityRecord[] $records */
+        $records = $query->all();
+
+        return $records;
     }
 
     public function countSince(DateTime $since, ?string $category = null): int

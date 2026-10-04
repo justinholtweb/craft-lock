@@ -7,6 +7,7 @@ use craft\base\Component;
 use craft\helpers\Db;
 use DateTime;
 use justinholtweb\lock\events\ErasureEvent;
+use justinholtweb\lock\helpers\Address;
 use justinholtweb\lock\models\DataRecord;
 use justinholtweb\lock\models\ErasureOutcome;
 use justinholtweb\lock\models\ErasurePlan;
@@ -135,9 +136,10 @@ class Erasure extends Component
         ?string $ruleKey = null,
     ): ErasureOutcome {
         if ($expectedFingerprint !== null && $expectedFingerprint !== $plan->fingerprint()) {
-            throw new InvalidArgumentException(
+            throw new InvalidArgumentException(Craft::t(
+                'lock',
                 'The data changed between the preview and now, so this is no longer the deletion that was approved. Preview it again.',
-            );
+            ));
         }
 
         /** @var Settings $settings */
@@ -186,16 +188,21 @@ class Erasure extends Component
                 // One record failing must not abandon the rest. A half-finished erasure that
                 // reports which half is recoverable; one that stops at the first error and says
                 // nothing is a subject told "done" over an untouched database.
+                //
+                // No label, and the address taken out of the message: this goes into the run
+                // ledger and the log, neither of which the erasure can reach afterwards, and a
+                // database error quotes its SQL with the bound values in it.
+                $error = $this->scrub($e->getMessage(), $this->subjectFor($plan, $target));
+
                 $outcome->failed++;
                 $outcome->failures[] = [
                     'source' => $target->source,
                     'key' => $target->key,
-                    'label' => $target->label,
                     'action' => $target->action,
-                    'error' => $e->getMessage(),
+                    'error' => $error,
                 ];
 
-                Craft::error("Lock could not $target->action $target->source:$target->key — " . $e->getMessage(), Plugin::LOG_CATEGORY);
+                Craft::error("Lock could not {$target->action} {$target->key} — {$error}", Plugin::LOG_CATEGORY);
             }
         }
 
@@ -221,6 +228,13 @@ class Erasure extends Component
         $this->trigger(self::EVENT_AFTER_ERASE, $event);
 
         return $outcome;
+    }
+
+    private function scrub(string $text, Subject $subject): string
+    {
+        $email = $subject->normalisedEmail();
+
+        return $email !== '' && str_contains($email, '@') ? Address::replace($text, $email, '[address]') : $text;
     }
 
     /** The person a given target belongs to — the plan's subject unless the target names another. */
@@ -265,10 +279,9 @@ class Erasure extends Component
         $run->type = $ruleKey !== null ? RunRecord::TYPE_RETENTION : RunRecord::TYPE_ERASURE;
         $run->status = $status;
         $run->ruleKey = $ruleKey;
-        $run->subjectEmail = $plan->subject->normalisedEmail() ?: null;
         $run->subjectHash = $plan->subject->normalisedEmail() !== '' ? $plan->subject->emailHash() : null;
         $run->requestId = $plan->requestId;
-        $run->summary = $plan->blocked ? $plan->blockReason : $outcome->summary();
+        $run->summary = $plan->blocked ? $this->scrub((string)$plan->blockReason, $plan->subject) : $outcome->summary();
         $run->plan = $plan->toArray();
         $run->outcome = $outcome->toArray();
         $run->fingerprint = $outcome->planFingerprint;

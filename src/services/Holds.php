@@ -78,8 +78,10 @@ class Holds extends Component
             ->select(['reference', 'type'])
             ->from([RequestRecord::tableName()])
             ->where(['email' => $subject->normalisedEmail()])
+            // Unverified requests do not count. Anybody can type an address into the form, and
+            // an unconfirmed request that blocked retention would let a stranger stop a site's
+            // retention rules from ever touching somebody's data, one form submission at a time.
             ->andWhere(['status' => [
-                Request::STATUS_UNVERIFIED,
                 Request::STATUS_OPEN,
                 Request::STATUS_ASSEMBLED,
                 Request::STATUS_AWAITING,

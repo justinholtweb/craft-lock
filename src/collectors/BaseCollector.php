@@ -4,6 +4,7 @@ namespace justinholtweb\lock\collectors;
 
 use Craft;
 use DateTime;
+use justinholtweb\lock\helpers\Address;
 use justinholtweb\lock\models\Bundle;
 use justinholtweb\lock\models\DataRecord;
 use justinholtweb\lock\models\ErasureTarget;
@@ -65,9 +66,18 @@ abstract class BaseCollector implements CollectorInterface
         } catch (Throwable $e) {
             // Deliberately swallowed. A dossier that says "we could not read the orders table"
             // is a usable answer; an exception that abandons the other thirteen sources is not.
-            $bundle->errors[] = $e->getMessage();
+            //
+            // The address is taken out of the message first. A database error quotes the SQL it
+            // ran, bound values included, and this message goes on to the bundle, the plan, the
+            // run ledger and the log — four places an erasure would never reach.
+            $message = $subject->normalisedEmail() !== ''
+                ? Address::replace($e->getMessage(), $subject->normalisedEmail(), '[address]')
+                : $e->getMessage();
+            $bundle->errors[] = $message;
+            // Keyed by hash, never by address. This log outlives every erasure Lock performs, so
+            // an address written here is an address no erasure can reach.
             Craft::error(
-                sprintf('Collector %s failed for %s: %s', static::handle(), $subject->normalisedEmail(), $e->getMessage()),
+                sprintf('Collector %s failed for subject %s: %s', static::handle(), substr($subject->emailHash(), 0, 12), $message),
                 Plugin::LOG_CATEGORY,
             );
         }
@@ -225,9 +235,6 @@ abstract class BaseCollector implements CollectorInterface
      */
     protected function needles(string $value): array
     {
-        $encoded = json_encode($value, JSON_UNESCAPED_UNICODE);
-        $inner = $encoded === false ? $value : substr($encoded, 1, -1);
-
-        return array_values(array_unique([$value, $inner]));
+        return Address::needles($value);
     }
 }

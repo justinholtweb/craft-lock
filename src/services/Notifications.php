@@ -83,11 +83,19 @@ class Notifications extends Component
         );
     }
 
-    /** The deadline nudge. Increments the counter so the same threshold is not sent twice. */
+    /**
+     * The deadline nudge. Increments the counter so the same threshold is not sent twice.
+     *
+     * Pro, and it goes to staff, so it respects the staff switch like every other staff email.
+     */
     public function sendReminder(Request $request): bool
     {
         /** @var Settings $settings */
         $settings = Plugin::getInstance()->getSettings();
+
+        if (!Plugin::getInstance()->isPro() || !$settings->notifyStaff) {
+            return false;
+        }
 
         $sent = $this->send(
             $settings->resolvedStaffRecipients(),

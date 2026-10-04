@@ -21,6 +21,8 @@ class RegisterController extends Controller
             return false;
         }
 
+        $this->requireCpRequest();
+
         if (!Plugin::getInstance()->isPro()) {
             throw new ForbiddenHttpException(Craft::t('lock', 'The record of processing activities is a Pro feature.'));
         }

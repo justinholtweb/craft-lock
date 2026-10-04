@@ -1,10 +1,18 @@
 {# What a rule would do right now. Note that a skipped row still appears, with its reason: "we
    found 4,000 old submissions and touched none of them, because their owners have open requests"
    is the useful answer, and an empty list says the opposite. #}
+{% set shown = 200 %}
+
 <div class="lock-plan">
     <table class="data fullwidth">
+        <thead>
+            <tr>
+                <th scope="col">{{ "What happens"|t('lock') }}</th>
+                <th scope="col">{{ "Record"|t('lock') }}</th>
+            </tr>
+        </thead>
         <tbody>
-            {% for target in plan.targets|slice(0, 200) %}
+            {% for target in plan.targets|slice(0, shown) %}
                 <tr>
                     <td class="thin"><span class="lock-action lock-action-{{ target.action }}">{{ target.actionLabel() }}</span></td>
                     <td>
@@ -13,13 +21,16 @@
                     </td>
                 </tr>
             {% else %}
-                <tr><td class="light">{{ "Nothing is old enough yet."|t('lock') }}</td></tr>
+                <tr><td colspan="2"><p class="zilch small">{{ "Nothing is old enough yet."|t('lock') }}</p></td></tr>
             {% endfor %}
         </tbody>
     </table>
 </div>
 
-<p class="light" style="margin-top:8px;">
+<p class="light lock-mt-s">
+    {% if plan.targets|length > shown %}
+        {{ "Showing the first {shown} of {n}."|t('lock', {shown: shown, n: plan.targets|length}) }}
+    {% endif %}
     {{ "{erase} to delete, {anonymise} to anonymise, {skip} kept. Cutoff: {date}."|t('lock', {
         erase: plan.countBy('erase'),
         anonymise: plan.countBy('anonymise'),
@@ -27,10 +38,13 @@
         date: rule.cutoff()|date('short'),
     }) }}
     {% if plan.targets|length >= rule.limit %}
-        {{ "The rule’s limit of {n} was reached, so there is probably more behind it — it will keep going on later runs."|t('lock', {n: rule.limit}) }}
+        {{ "The rule’s limit of {n} was reached, so there is probably more behind it. It will keep going on later runs."|t('lock', {n: rule.limit}) }}
     {% endif %}
 </p>
 
-{% for error in plan.errors %}
-    <div class="lock-flag lock-bad">{{ error }}</div>
-{% endfor %}
+{% if plan.errors|length %}
+    <div class="readable"><blockquote class="note">
+        <strong>{{ "Some sources could not be read, so this preview is incomplete."|t('lock') }}</strong>
+        <ul>{% for error in plan.errors %}<li>{{ error }}</li>{% endfor %}</ul>
+    </blockquote></div>
+{% endif %}

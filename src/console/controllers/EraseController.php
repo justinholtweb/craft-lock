@@ -3,11 +3,13 @@
 namespace justinholtweb\lock\console\controllers;
 
 use craft\console\Controller;
+use craft\helpers\App;
 use craft\helpers\Console;
 use justinholtweb\lock\models\ErasureTarget;
-use justinholtweb\lock\models\Settings;
 use justinholtweb\lock\models\Subject;
 use justinholtweb\lock\Plugin;
+use yii\base\InvalidArgumentException;
+use yii\base\InvalidCallException;
 use yii\console\ExitCode;
 
 /**
@@ -30,12 +32,21 @@ class EraseController extends Controller
     /** @var bool Actually do it. Without this, nothing is changed. */
     public bool $force = false;
 
+    /**
+     * @var string|null The fingerprint `preview` printed. Required with `--force`: the run only
+     *      goes ahead if the plan it builds is the plan that was previewed.
+     */
+    public ?string $fingerprint = null;
+
+    /** @var string|null A request reference, to assemble for that request rather than for a bare address. */
+    public ?string $reference = null;
+
     public function options($actionID): array
     {
         return match ($actionID) {
             'preview' => array_merge(parent::options($actionID), ['email', 'mode']),
-            'run' => array_merge(parent::options($actionID), ['email', 'mode', 'force']),
-            'assemble' => array_merge(parent::options($actionID), ['email']),
+            'run' => array_merge(parent::options($actionID), ['email', 'mode', 'force', 'fingerprint']),
+            'assemble' => array_merge(parent::options($actionID), ['email', 'reference']),
             'check' => array_merge(parent::options($actionID), ['email']),
             default => parent::options($actionID),
         };
@@ -53,7 +64,7 @@ class EraseController extends Controller
         $plan = Plugin::getInstance()->erasure->plan($subject, $this->mode);
 
         if ($plan->blocked) {
-            $this->stdout("BLOCKED: $plan->blockReason\n", Console::FG_RED);
+            $this->stdout("BLOCKED: {$plan->blockReason}\n", Console::FG_RED);
 
             return ExitCode::UNSPECIFIED_ERROR;
         }
@@ -88,7 +99,12 @@ class EraseController extends Controller
         return ExitCode::OK;
     }
 
-    /** Carries it out. Needs `--force`. */
+    /**
+     * Carries it out. Needs `--force` and the `--fingerprint` that `preview` printed.
+     *
+     * The fingerprint is the approval. Without it, `--force` would erase whatever the plan happens
+     * to contain at the moment the command runs — including rows that arrived after anybody looked.
+     */
     public function actionRun(): int
     {
         $subject = $this->subject();
@@ -97,19 +113,35 @@ class EraseController extends Controller
             return ExitCode::USAGE;
         }
 
+        $fingerprint = trim((string)$this->fingerprint);
+
+        if ($this->force && $fingerprint === '') {
+            $this->stderr("--fingerprint is needed with --force. Run `lock/erase/preview` first and pass the fingerprint it prints.\n", Console::FG_RED);
+
+            return ExitCode::USAGE;
+        }
+
+        App::maxPowerCaptain();
+
         $plan = Plugin::getInstance()->erasure->plan($subject, $this->mode);
 
         if ($plan->blocked) {
-            $this->stdout("BLOCKED: $plan->blockReason\n", Console::FG_RED);
+            $this->stdout("BLOCKED: {$plan->blockReason}\n", Console::FG_RED);
 
             return ExitCode::UNSPECIFIED_ERROR;
         }
 
         if (!$this->force) {
-            $this->stdout("Dry run — nothing was changed. Add --force to apply it.\n", Console::FG_YELLOW);
+            $this->stdout("Dry run — nothing was changed. Add --force and --fingerprint to apply it.\n", Console::FG_YELLOW);
         }
 
-        $outcome = Plugin::getInstance()->erasure->run($plan, !$this->force);
+        try {
+            $outcome = Plugin::getInstance()->erasure->run($plan, !$this->force, $this->force ? $fingerprint : null);
+        } catch (InvalidArgumentException $e) {
+            $this->stderr($e->getMessage() . "\n", Console::FG_RED);
+
+            return ExitCode::DATAERR;
+        }
 
         $this->stdout($outcome->summary() . "\n", $outcome->isClean() ? Console::FG_GREEN : Console::FG_RED);
 
@@ -120,22 +152,44 @@ class EraseController extends Controller
         return $outcome->isClean() ? ExitCode::OK : ExitCode::UNSPECIFIED_ERROR;
     }
 
-    /** Assembles a dossier and writes the archive, for answering a request from the shell. */
+    /**
+     * Assembles a dossier and writes the archive, for answering a request from the shell.
+     *
+     * With `--reference`, it is assembled for that request exactly as the control panel would —
+     * the archive is attached to it and the timeline records it. With only `--email`, it is a
+     * one-off for an address.
+     */
     public function actionAssemble(): int
     {
-        $subject = $this->subject();
-
-        if ($subject === null) {
-            return ExitCode::USAGE;
-        }
-
         $plugin = Plugin::getInstance();
-        /** @var Settings $settings */
-        $settings = $plugin->getSettings();
 
-        $dossier = $plugin->dossiers->assemble($subject);
-        $password = $settings->protectDossier ? $plugin->dossiers->generatePassword() : null;
-        $filename = $plugin->dossiers->export($dossier, $password);
+        App::maxPowerCaptain();
+
+        if ($this->reference !== null && trim($this->reference) !== '') {
+            $request = $plugin->requests->getByReference(trim($this->reference));
+
+            if ($request === null) {
+                $this->stderr("No request {$this->reference}.\n", Console::FG_RED);
+
+                return ExitCode::USAGE;
+            }
+
+            try {
+                [$dossier, $password, $filename] = $plugin->requests->assemble($request);
+            } catch (InvalidCallException $e) {
+                $this->stderr($e->getMessage() . "\n", Console::FG_RED);
+
+                return ExitCode::UNSPECIFIED_ERROR;
+            }
+        } else {
+            $subject = $this->subject();
+
+            if ($subject === null) {
+                return ExitCode::USAGE;
+            }
+
+            [$dossier, $password, $filename] = $plugin->dossiers->build($subject);
+        }
 
         foreach ($dossier->bundles as $bundle) {
             $this->stdout(sprintf(

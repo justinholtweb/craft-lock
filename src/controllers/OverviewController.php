@@ -17,6 +17,17 @@ use yii\web\Response;
  */
 class OverviewController extends Controller
 {
+    public function beforeAction($action): bool
+    {
+        if (!parent::beforeAction($action)) {
+            return false;
+        }
+
+        $this->requireCpRequest();
+
+        return true;
+    }
+
     public function actionIndex(): Response
     {
         $this->requirePermission(Plugin::PERMISSION_VIEW);

@@ -6,6 +6,7 @@ use Craft;
 use craft\db\Query;
 use craft\helpers\Db;
 use DateTime;
+use justinholtweb\lock\helpers\Address;
 use justinholtweb\lock\models\Bundle;
 use justinholtweb\lock\models\DataRecord;
 use justinholtweb\lock\models\ErasureTarget;
@@ -89,8 +90,10 @@ class FreeformCollector extends BaseCollector
 
         $conditions = ['or'];
 
-        foreach ($columns as $column) {
-            $conditions[] = ['like', $column, $email];
+        if ($email !== '') {
+            foreach ($columns as $column) {
+                $conditions[] = ['like', $column, $email];
+            }
         }
 
         if ($subject->userId !== null) {
@@ -114,6 +117,14 @@ class FreeformCollector extends BaseCollector
         $records = [];
 
         foreach ($rows as $row) {
+            // The `LIKE` above is a prefilter. `%lex@corp.co%` matches `alex@corp.com` too, so a
+            // row found only by text has to contain the exact address in some column to count.
+            $mine = $subject->userId !== null && (int)($row['userId'] ?? 0) === $subject->userId;
+
+            if (!$mine && !$this->rowContains($row, $columns, $email)) {
+                continue;
+            }
+
             $data = ['Form' => $forms[$row['formId']] ?? $row['formId'], 'Submitted' => $row['dateCreated'], 'IP' => $row['ip'] ?? null];
 
             foreach ($columns as $column) {
@@ -131,6 +142,22 @@ class FreeformCollector extends BaseCollector
         }
 
         return $records;
+    }
+
+    /** @param string[] $columns */
+    private function rowContains(array $row, array $columns, string $email): bool
+    {
+        if ($email === '') {
+            return false;
+        }
+
+        foreach ($columns as $column) {
+            if (is_string($row[$column] ?? null) && Address::contains($row[$column], $email)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /** Freeform names its columns after field handles; a handle is not a label. */
@@ -169,8 +196,8 @@ class FreeformCollector extends BaseCollector
         }
 
         foreach ($this->searchableColumns() as $column) {
-            if (is_string($row[$column] ?? null) && stripos($row[$column], $subject->normalisedEmail()) !== false) {
-                $values[$column] = str_ireplace($subject->normalisedEmail(), $replacement, $row[$column]);
+            if (is_string($row[$column] ?? null) && Address::contains($row[$column], $subject->normalisedEmail())) {
+                $values[$column] = Address::replace($row[$column], $subject->normalisedEmail(), $replacement);
             }
         }
 

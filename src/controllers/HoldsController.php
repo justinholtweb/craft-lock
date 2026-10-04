@@ -6,6 +6,7 @@ use Craft;
 use craft\helpers\DateTimeHelper;
 use craft\web\Controller;
 use justinholtweb\lock\models\Hold;
+use justinholtweb\lock\models\Subject;
 use justinholtweb\lock\Plugin;
 use justinholtweb\lock\records\ActivityRecord;
 use yii\web\Response;
@@ -19,6 +20,17 @@ use yii\web\Response;
  */
 class HoldsController extends Controller
 {
+    public function beforeAction($action): bool
+    {
+        if (!parent::beforeAction($action)) {
+            return false;
+        }
+
+        $this->requireCpRequest();
+
+        return true;
+    }
+
     public function actionIndex(): Response
     {
         $this->requirePermission(Plugin::PERMISSION_HOLDS);
@@ -45,19 +57,30 @@ class HoldsController extends Controller
             $hold->expiresAt = $date === false ? null : $date;
         }
 
+        $isNew = $hold->id === null;
+
         if (!Plugin::getInstance()->holds->save($hold)) {
             return $this->asModelFailure($hold, Craft::t('lock', 'A hold needs a reason. It is the thing that will be read a year from now.'), 'hold');
         }
 
+        // The person is recorded as the subject — a keyed hash — and never in the summary text.
+        // The ledger is append-only, so an address written into a sentence here would outlive
+        // any erasure of the person it names.
         Plugin::getInstance()->activity->log(
             ActivityRecord::CATEGORY_ADMIN,
-            'hold.placed',
-            $hold->isSiteWide()
-                ? Craft::t('lock', 'A site-wide hold was placed: {reason}', ['reason' => $hold->reason])
-                : Craft::t('lock', 'A hold was placed on {email}: {reason}', ['email' => $hold->email, 'reason' => $hold->reason]),
+            $isNew ? 'hold.placed' : 'hold.updated',
+            match (true) {
+                $hold->isSiteWide() && $isNew => Craft::t('lock', 'A site-wide hold was placed: {reason}', ['reason' => $hold->reason]),
+                $hold->isSiteWide() => Craft::t('lock', 'A site-wide hold was changed: {reason}', ['reason' => $hold->reason]),
+                $isNew => Craft::t('lock', 'A hold was placed on one person: {reason}', ['reason' => $hold->reason]),
+                default => Craft::t('lock', 'A hold on one person was changed: {reason}', ['reason' => $hold->reason]),
+            },
+            $hold->isSiteWide() ? null : new Subject(email: $hold->email),
+            null,
+            ['holdId' => $hold->id],
         );
 
-        return $this->asSuccess(Craft::t('lock', 'Hold placed.'));
+        return $this->asSuccess($isNew ? Craft::t('lock', 'Hold placed.') : Craft::t('lock', 'Hold updated.'));
     }
 
     public function actionDelete(): ?Response
@@ -75,6 +98,9 @@ class HoldsController extends Controller
                 ActivityRecord::CATEGORY_ADMIN,
                 'hold.lifted',
                 Craft::t('lock', 'A hold was lifted: {reason}', ['reason' => $hold->reason]),
+                $hold->isSiteWide() ? null : new Subject(email: $hold->email),
+                null,
+                ['holdId' => $hold->id],
             );
         }
 

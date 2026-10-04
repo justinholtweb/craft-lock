@@ -65,6 +65,27 @@ class Dossiers extends Component
     }
 
     /**
+     * Assembles and exports in one step, with the protection the settings ask for.
+     *
+     * Returns the dossier, the one-time archive password (null when archives are not protected)
+     * and the archive's filename. The password is never stored — a password kept next to the file
+     * it protects protects nothing.
+     *
+     * @return array{0: Dossier, 1: string|null, 2: string}
+     */
+    public function build(Subject $subject, ?int $requestId = null): array
+    {
+        /** @var \justinholtweb\lock\models\Settings $settings */
+        $settings = Plugin::getInstance()->getSettings();
+
+        $dossier = $this->assemble($subject, $requestId);
+        $password = $settings->protectDossier ? $this->generatePassword() : null;
+        $filename = $this->export($dossier, $password);
+
+        return [$dossier, $password, $filename];
+    }
+
+    /**
      * Writes the dossier out as a ZIP and hands back its path, relative to the plugin's storage.
      *
      * Four formats, all built from `Dossier::toDisclosure()`. That is the point: JSON for a
@@ -77,9 +98,8 @@ class Dossiers extends Component
     public function export(Dossier $dossier, ?string $password = null): string
     {
         $disclosure = $dossier->toDisclosure();
-        $slug = StringHelper::slugify($dossier->subject->normalisedEmail()) ?: 'subject';
         $stamp = ($dossier->builtAt ?? new DateTime())->format('Ymd-His');
-        $name = "lock-$slug-$stamp.zip";
+        $name = $this->filePrefix($dossier->subject) . "$stamp-" . StringHelper::randomString(6) . '.zip';
 
         $directory = $this->storagePath();
         FileHelper::createDirectory($directory);
@@ -126,6 +146,49 @@ class Dossiers extends Component
     public function pathFor(string $filename): string
     {
         return $this->storagePath() . DIRECTORY_SEPARATOR . basename($filename);
+    }
+
+    /**
+     * How a subject's archives are named: by a prefix of the keyed hash, never by the address.
+     *
+     * A filename is listed by every backup, every `ls` and every sync tool, and outlives the
+     * archive's contents in all of them. Keying it by hash still lets {@see deleteFor()} find every
+     * archive belonging to one person.
+     */
+    private function filePrefix(Subject $subject): string
+    {
+        return 'lock-' . substr($subject->emailHash(), 0, 16) . '-';
+    }
+
+    /**
+     * Deletes every archive built for this subject, plus a named one. Returns how many went.
+     *
+     * Called when an erasure request is answered: a dossier is a copy of everything that was just
+     * erased, and leaving it in storage would undo the erasure on disk.
+     */
+    public function deleteFor(Subject $subject, ?string $filename = null): int
+    {
+        $directory = $this->storagePath();
+
+        if (!is_dir($directory)) {
+            return 0;
+        }
+
+        $removed = 0;
+        $files = FileHelper::findFiles($directory, ['only' => [$this->filePrefix($subject) . '*.zip'], 'recursive' => false]);
+
+        if ($filename !== null && $filename !== '') {
+            $files[] = $this->pathFor($filename);
+        }
+
+        foreach (array_unique($files) as $file) {
+            if (is_file($file)) {
+                FileHelper::unlink($file);
+                $removed++;
+            }
+        }
+
+        return $removed;
     }
 
     /** A one-use password, shown to the operator once and never stored. */
@@ -252,13 +315,13 @@ class Dossiers extends Component
         foreach ($dossier->bundles as $bundle) {
             foreach ($bundle->records as $record) {
                 foreach ($this->flatData($record) as $field => $value) {
-                    fputcsv($handle, [
+                    fputcsv($handle, array_map(fn(string $cell) => $this->csvCell($cell), [
                         $bundle->sourceLabel,
                         $record->label,
                         $record->dateCreated?->format('Y-m-d') ?? '',
-                        $field,
+                        (string)$field,
                         is_scalar($value) ? (string)$value : Json::encode($value),
-                    ]);
+                    ]));
                 }
             }
         }
@@ -268,6 +331,19 @@ class Dossiers extends Component
         fclose($handle);
 
         return $csv;
+    }
+
+    /**
+     * One cell, defused against formula injection.
+     *
+     * Every value in this file was typed by somebody — often by the very person the file is for,
+     * into a public form. A cell that starts with `=`, `+`, `-` or `@` (or a tab or carriage
+     * return that a spreadsheet strips first) is run as a formula when the file is opened, so it
+     * is prefixed with an apostrophe, which spreadsheets read as "this is text".
+     */
+    private function csvCell(string $value): string
+    {
+        return $value !== '' && in_array($value[0], ['=', '+', '-', '@', "\t", "\r"], true) ? "'" . $value : $value;
     }
 
     /** @return array<string, mixed> */

@@ -1,3 +1,10 @@
+---
+title: Configuration
+slug: configuration
+order: 60
+summary: Every setting, across three screens, and the config/lock.php overrides for each.
+---
+
 # Configuration
 
 Everything is in *Lock → Settings*, across three screens, and everything goes to project config.
@@ -42,11 +49,39 @@ return [
 | `requireVerification` | `true` | **leave this on** — see below |
 | `verificationTtl` | `48` | hours a confirmation link lives |
 | `intakeRateLimit` | `5` | per hour, per address *and* per IP; 0 disables |
+| `intakeGlobalLimit` | `200` | per hour across the whole site; 0 disables. `config/lock.php` only |
 | `trustSignedInSubjects` | `true` | skips confirmation for somebody asking about their own signed-in address |
 
 Turning `requireVerification` off makes the intake form a way to delete somebody else's account by
 typing their address into it. There is a legitimate case — an intranet where every visitor is
 authenticated — and there is no other one.
+
+The per-address limit counts the cheap spellings of one mailbox as one: case, `+tags`, and for
+Gmail the dots and `googlemail.com`. The site-wide limit is the backstop against a script spread
+over many IPs, each naming a different address — every accepted submission sends an email. Every
+limited submission gets exactly the answer a genuine one does. The status lookup and the consent
+form are limited too, at four times `intakeRateLimit`.
+
+### Behind a proxy or CDN
+
+The per-IP limits, and the IP recorded in the ledger and on consent evidence, come from Craft's
+`getUserIP()`. Behind a load balancer, Cloudflare or any reverse proxy, that is the proxy's address
+unless Craft has been told which proxies to trust — and then every visitor shares one rate limit
+and one IP. Configure `trustedHosts` (and, if your proxy uses something other than
+`X-Forwarded-For`, `ipHeaders`) on the request component in `config/app.web.php`:
+
+```php
+return [
+    'components' => [
+        'request' => [
+            'trustedHosts' => ['10.0.0.0/8', '173.245.48.0/20' /* … your proxy ranges */],
+        ],
+    ],
+];
+```
+
+Do not trust `X-Forwarded-For` from everybody. An unvalidated forwarded header is a value the
+client chose, which makes the per-IP limit a limit the attacker sets.
 
 ## Where to look
 
@@ -76,6 +111,11 @@ Names are validated as plain identifiers when saved **and again** when used. One
 way in is a policy; validating again at the point the string reaches a query is what makes it
 true. A table with a `dateColumn` and a mode other than `read` also becomes a retention scope.
 
+Craft's own tables (`users`, `elements`, `elements_sites`, `sessions`, Craft 4's `content`, and
+everything else in Craft's table registry) and Lock's own `lock_*` tables are refused, at save time
+and again at query time. Each is already searched properly by a dedicated source, and a rule
+pointed at one could delete accounts outside the element layer or edit the append-only ledger.
+
 ## Anonymise and erase
 
 | Setting | Default | |
@@ -95,7 +135,10 @@ true. A table with a `dateColumn` and a mode other than `read` also becomes a re
 | `protectDossier` | `true` | AES-256, with a password shown once and never stored |
 
 A built dossier is the most concentrated personal data on the site — one file with everything
-about one person in it. `lock/requests/tidy` deletes the expired ones; put it on cron.
+about one person in it. `lock/requests/tidy` deletes the expired ones; put it on cron. Craft's own
+garbage collection does the same, so a site without cron is covered too. Archives are named by a
+prefix of the subject's keyed hash, never by their address, and the CSV inside defuses any value
+a spreadsheet would run as a formula.
 
 ## Consent
 
@@ -114,14 +157,14 @@ about one person in it. `lock/requests/tidy` deletes the expired ones; put it on
 | `scheduleTrigger` | `cron` | or `web`, which fires from control-panel traffic |
 | `scheduleFrequency` | `daily` | |
 | `scheduleTime` | `03:00` | 24-hour, site time zone |
-| `retentionDryRunFirst` | `true` | a new rule reports before it deletes |
+| `retentionDryRunFirst` | `true` | a new rule's first run reports instead of deleting; the second applies it |
 
 ## Notifications and logging
 
 | Setting | Default | |
 |---|---|---|
 | `notifySubject` | `true` | |
-| `notifyStaff` | `true` | |
+| `notifyStaff` | `true` | new requests, deadline reminders (Pro) and retention reports |
 | `logLevel` | `info` | writes `storage/logs/lock.log`, kept 90 days |
 | `activityRetentionDays` | `0` | 0 keeps the ledger forever |
 

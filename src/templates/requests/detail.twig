@@ -1,5 +1,6 @@
 {% extends "_layouts/cp" %}
 {% import "_includes/forms" as forms %}
+{% import "lock/_partials/macros" as lock %}
 
 {% set title = request.reference %}
 {% set selectedSubnavItem = 'requests' %}
@@ -7,240 +8,325 @@
 {% set days = request.daysRemaining() %}
 {% set fullPageForm = false %}
 
+{# The one primary action on the screen is whatever the job needs next: assembling, until there is
+   something assembled, and then answering. Erasing is never primary; it is the caution button. #}
+{% set actionable = request.isActionable() %}
+{% set assembleIsPrimary = actionable and request.isOpen() and not request.dossierBuiltAt %}
+
 {% block content %}
     {% include "lock/_partials/style" %}
 
     <div class="lock-grid">
         <div class="lock-stat">
-            <h4>{{ "Asked for"|t('lock') }}</h4>
-            <div style="font-size:18px;font-weight:600;">{{ request.type }}</div>
+            <h2 class="lock-stat-heading">{{ "Asked for"|t('lock') }}</h2>
+            <div class="lock-stat-value">{{ request.typeLabel() }}</div>
             <span class="light">{{ request.article() }}</span>
         </div>
         <div class="lock-stat">
-            <h4>{{ "Status"|t('lock') }}</h4>
-            <div style="font-size:18px;font-weight:600;">{{ request.statusLabel() }}</div>
+            <h2 class="lock-stat-heading">{{ "Status"|t('lock') }}</h2>
+            <div class="lock-stat-value">{{ lock.requestStatus(request) }}</div>
             {% if request.verifiedAt %}<span class="light">{{ "Identity confirmed {date}"|t('lock', {date: request.verifiedAt|date('short')}) }}</span>{% endif %}
         </div>
         <div class="lock-stat{{ request.isOverdue() ? ' lock-alarm' }}">
-            <h4>{{ "Deadline"|t('lock') }}</h4>
+            <h2 class="lock-stat-heading">{{ "Deadline"|t('lock') }}</h2>
             <div class="lock-figure lock-due lock-{{ request.urgency() }}">
-                {%- if request.isClosed() -%}—{% elseif days is null %}—{% elseif days < 0 %}{{ days|abs }}{% else %}{{ days }}{% endif -%}
+                {%- if request.isClosed() or days is null -%}{{ lock.none() }}{% elseif days < 0 %}{{ days|abs }}{% else %}{{ days }}{% endif -%}
             </div>
             <span class="light">
                 {%- if request.isClosed() %}{{ "Closed {date}"|t('lock', {date: request.closedAt ? request.closedAt|date('short') : ''}) }}
-                {%- elseif days is not null and days < 0 %}{{ "days late — due {date}"|t('lock', {date: request.dueAt|date('short')}) }}
-                {%- else %}{{ "days left — due {date}"|t('lock', {date: request.dueAt ? request.dueAt|date('short') : ''}) }}{% endif -%}
+                {%- elseif days is not null and days < 0 %}{{ "days late, due {date}"|t('lock', {date: request.dueAt|date('short')}) }}
+                {%- else %}{{ "days left, due {date}"|t('lock', {date: request.dueAt ? request.dueAt|date('short') : ''}) }}{% endif -%}
             </span>
         </div>
     </div>
 
     {% if block %}
-        <div class="lock-flag lock-bad"><strong>{{ "On hold."|t('lock') }}</strong> {{ block }}</div>
+        <div class="readable"><blockquote class="note warning"><strong>{{ "On hold."|t('lock') }}</strong> {{ block }}</blockquote></div>
     {% endif %}
 
-    <div id="content-container" class="flex" style="align-items:flex-start;gap:24px;">
-        <div class="flex-grow" style="min-width:0;">
-
-            <h2>{{ "The subject"|t('lock') }}</h2>
-            <table class="data fullwidth">
-                <tr><th class="thin">{{ "Email"|t('lock') }}</th><td>{{ request.email }}</td></tr>
-                {% if request.name %}<tr><th>{{ "Name"|t('lock') }}</th><td>{{ request.name }}</td></tr>{% endif %}
-                {% if request.userId %}
-                    <tr><th>{{ "Account"|t('lock') }}</th><td><a href="{{ cpUrl('users/' ~ request.userId) }}">{{ "User #{id}"|t('lock', {id: request.userId}) }}</a></td></tr>
-                {% else %}
-                    <tr><th>{{ "Account"|t('lock') }}</th><td class="light">{{ "No account — everything is matched by address."|t('lock') }}</td></tr>
-                {% endif %}
-                <tr><th>{{ "Received"|t('lock') }}</th><td>{{ request.receivedAt|datetime('short') }} <span class="light">({{ request.source }})</span></td></tr>
-            </table>
-
-            {% if request.message %}
-                <h2>{{ "What they said"|t('lock') }}</h2>
-                <blockquote class="note">{{ request.message|nl2br }}</blockquote>
+    <h2>{{ "The subject"|t('lock') }}</h2>
+    <table class="data fullwidth">
+        <tbody>
+            <tr><th scope="row" class="thin">{{ "Email"|t('lock') }}</th><td>{{ request.email }}</td></tr>
+            {% if request.name %}<tr><th scope="row">{{ "Name"|t('lock') }}</th><td>{{ request.name }}</td></tr>{% endif %}
+            {% if request.userId %}
+                <tr><th scope="row">{{ "Account"|t('lock') }}</th><td><a href="{{ cpUrl('users/' ~ request.userId) }}">{{ "User #{id}"|t('lock', {id: request.userId}) }}</a></td></tr>
+            {% else %}
+                <tr><th scope="row">{{ "Account"|t('lock') }}</th><td class="light">{{ "No account. Everything is matched by address."|t('lock') }}</td></tr>
             {% endif %}
+            <tr><th scope="row">{{ "Received"|t('lock') }}</th><td>{{ request.receivedAt|datetime('short') }} <span class="light">({{ lock.requestSource(request.source) }})</span></td></tr>
+        </tbody>
+    </table>
 
-            <h2>{{ "Everything held"|t('lock') }}</h2>
+    {% if request.message %}
+        <h2>{{ "What they said"|t('lock') }}</h2>
+        <div class="readable"><blockquote>{{ request.message|nl2br }}</blockquote></div>
+    {% endif %}
 
-            <p class="light">
-                {{ "Assembling searches every source Lock knows about and writes an archive containing the same disclosure as JSON, CSV and a readable page, with a covering note saying where it looked."|t('lock') }}
+    <h2>{{ "Everything held"|t('lock') }}</h2>
+
+    <p class="light">
+        {{ "Assembling searches every source Lock knows about and writes an archive containing the same disclosure as JSON, CSV and a readable page, with a covering note saying where it looked."|t('lock') }}
+    </p>
+
+    {% if not actionable %}
+        <div class="readable"><blockquote class="note warning">
+            {{ "This request has not been confirmed, so nothing can be assembled or erased for it yet. Lock only acts on a request once the subject has followed the confirmation link, or once it was recorded here by staff."|t('lock') }}
+        </blockquote></div>
+    {% endif %}
+
+    <div class="lock-row">
+        <form method="post" class="lock-inline-form">
+            {{ csrfInput() }}{{ actionInput('lock/requests/assemble') }}
+            {{ hiddenInput('requestId', request.id) }}
+            {{ redirectInput('lock/requests/' ~ request.id) }}
+            <button type="submit" class="btn{{ assembleIsPrimary ? ' submit' }}{{ not actionable ? ' disabled' }}"{{ not actionable ? ' disabled' }}>
+                {{ request.dossierBuiltAt ? "Assemble again"|t('lock') : "Assemble"|t('lock') }}
+            </button>
+        </form>
+
+        {% if request.dossierBuiltAt %}
+            <form method="post" class="lock-inline-form">
+                {{ csrfInput() }}{{ actionInput('lock/requests/download') }}
+                {{ hiddenInput('requestId', request.id) }}
+                <button type="submit" class="btn">{{ "Download"|t('lock') }}</button>
+            </form>
+            <span class="light">{{ "Assembled {date}."|t('lock', {date: request.dossierBuiltAt|datetime('short')}) }}</span>
+        {% endif %}
+    </div>
+
+    {% if canErase and actionable %}
+        <h2>{{ "Anonymise or erase"|t('lock') }}</h2>
+
+        <p class="light">
+            {{ "Anonymising keeps the record and destroys the person in it: the order still balances, the comment still reads, nobody can tell whose it was. Erasing deletes the record outright. Some records refuse both, and say why."|t('lock') }}
+        </p>
+
+        <div id="lock-erase-panel">
+            {{ forms.selectField({
+                label: "Treatment"|t('lock'),
+                id: 'lock-mode',
+                name: 'mode',
+                options: [
+                    {label: "Anonymise where possible"|t('lock'), value: 'anonymise'},
+                    {label: "Delete where possible"|t('lock'), value: 'erase'},
+                ],
+            }) }}
+
+            <p>
+                {{ forms.button({
+                    id: 'lock-preview',
+                    label: "Show me what would happen"|t('lock'),
+                    spinner: true,
+                }) }}
             </p>
 
-            {% if request.dossierBuiltAt %}
-                <div class="lock-flag">
-                    {{ "Assembled {date}."|t('lock', {date: request.dossierBuiltAt|datetime('short')}) }}
-                    <form method="post" style="display:inline;">
-                        {{ csrfInput() }}{{ actionInput('lock/requests/download') }}
-                        {{ hiddenInput('requestId', request.id) }}
-                        <button type="submit" class="btn small">{{ "Download"|t('lock') }}</button>
-                    </form>
-                </div>
-            {% endif %}
+            <div id="lock-plan-status" class="visually-hidden" role="status" aria-live="polite"></div>
+            <div id="lock-plan-output" class="hidden"></div>
 
-            <form method="post">
-                {{ csrfInput() }}{{ actionInput('lock/requests/assemble') }}
-                {{ hiddenInput('requestId', request.id) }}
-                {{ redirectInput('lock/requests/' ~ request.id) }}
-                <button type="submit" class="btn submit">
-                    {{ request.dossierBuiltAt ? "Assemble again"|t('lock') : "Assemble"|t('lock') }}
-                </button>
-            </form>
-
-            {% if canErase %}
-                <h2>{{ "Anonymise or erase"|t('lock') }}</h2>
-
-                <p class="light">
-                    {{ "Anonymising keeps the record and destroys the person in it — the order still balances, the comment still reads, nobody can tell whose it was. Erasing deletes the record outright. Some records refuse both, and say why."|t('lock') }}
-                </p>
-
-                <div id="lock-erase-panel">
-                    <div class="field">
-                        <div class="heading"><label>{{ "Treatment"|t('lock') }}</label></div>
-                        <div class="input">
-                            {{ forms.select({
-                                id: 'lock-mode',
-                                name: 'mode',
-                                options: [
-                                    {label: "Anonymise where possible"|t('lock'), value: 'anonymise'},
-                                    {label: "Delete where possible"|t('lock'), value: 'erase'},
-                                ],
-                            }) }}
-                        </div>
-                    </div>
-
-                    <p><button type="button" class="btn" id="lock-preview">{{ "Show me what would happen"|t('lock') }}</button></p>
-
-                    <div id="lock-plan-output" class="hidden"></div>
-
-                    <div id="lock-confirm" class="hidden" style="margin-top:16px;">
-                        <form method="post">
-                            {{ csrfInput() }}{{ actionInput('lock/requests/erase') }}
-                            {{ hiddenInput('requestId', request.id) }}
-                            {{ redirectInput('lock/requests/' ~ request.id) }}
-                            <input type="hidden" name="mode" id="lock-confirm-mode" value="anonymise">
-                            <input type="hidden" name="fingerprint" id="lock-confirm-fingerprint" value="">
-                            <button type="submit" class="btn submit" id="lock-go">{{ "Carry out this plan"|t('lock') }}</button>
-                            <span class="light" style="margin-left:8px;">{{ "Exactly the records listed above, and no others."|t('lock') }}</span>
-                        </form>
-                    </div>
-                </div>
-            {% endif %}
-
-            <h2>{{ "Answer it"|t('lock') }}</h2>
-
-            <form method="post">
-                {{ csrfInput() }}{{ actionInput('lock/requests/close') }}
-                {{ hiddenInput('requestId', request.id) }}
-                {{ redirectInput('lock/requests/' ~ request.id) }}
-
-                {{ forms.selectField({
-                    label: "Close as"|t('lock'),
-                    id: 'status',
-                    name: 'status',
-                    options: [
-                        {label: "Completed"|t('lock'), value: 'completed'},
-                        {label: "Refused"|t('lock'), value: 'refused'},
-                        {label: "Withdrawn by the subject"|t('lock'), value: 'withdrawn'},
-                    ],
-                }) }}
-
-                {{ forms.textareaField({
-                    label: "What they were told"|t('lock'),
-                    instructions: "Required for a refusal — Article 12(4) says the subject has to be told why, and that they can complain to a supervisory authority."|t('lock'),
-                    id: 'outcome',
-                    name: 'outcome',
-                    rows: 3,
-                    value: request.outcome,
-                }) }}
-
-                {{ forms.lightswitchField({label: "Email the subject"|t('lock'), id: 'notify', name: 'notify', on: true}) }}
-
-                <button type="submit" class="btn submit">{{ "Close the request"|t('lock') }}</button>
-            </form>
-
-            {% if not request.wasExtended() and request.isOpen() %}
-                <h2>{{ "Need longer?"|t('lock') }}</h2>
-                <form method="post">
-                    {{ csrfInput() }}{{ actionInput('lock/requests/extend') }}
+            <div id="lock-confirm" class="hidden lock-mt">
+                <form method="post" id="lock-confirm-form">
+                    {{ csrfInput() }}{{ actionInput('lock/requests/erase') }}
                     {{ hiddenInput('requestId', request.id) }}
                     {{ redirectInput('lock/requests/' ~ request.id) }}
-                    {{ forms.textField({
-                        label: "Why"|t('lock'),
-                        instructions: "Article 12(3) allows two more months where a request is complex. The subject must be told within the first month, and told why — this text is what they are sent."|t('lock'),
-                        id: 'reason',
-                        name: 'reason',
-                    }) }}
-                    <button type="submit" class="btn">{{ "Claim the extension"|t('lock') }}</button>
+                    <input type="hidden" name="mode" id="lock-confirm-mode" value="anonymise">
+                    <input type="hidden" name="fingerprint" id="lock-confirm-fingerprint" value="">
+                    <div class="lock-row">
+                        <button type="submit" class="btn caution disabled" id="lock-go" disabled>{{ "Carry out this plan"|t('lock') }}</button>
+                        <span class="light">{{ "Exactly the records listed above, and no others."|t('lock') }}</span>
+                    </div>
                 </form>
-            {% endif %}
+            </div>
         </div>
+    {% endif %}
 
-        <div style="width:320px;flex-shrink:0;">
-            <h2>{{ "What has happened"|t('lock') }}</h2>
+    <h2>{{ "Answer it"|t('lock') }}</h2>
 
-            <ul class="lock-timeline">
-                {% for event in timeline %}
-                    <li>
-                        <span class="lock-when">{{ event.dateCreated|datetime('short') }}</span>
-                        <strong>{{ event.type }}</strong>
-                        {% if event.message %}<div>{{ event.message }}</div>{% endif %}
-                    </li>
-                {% endfor %}
-            </ul>
+    <form method="post">
+        {{ csrfInput() }}{{ actionInput('lock/requests/close') }}
+        {{ hiddenInput('requestId', request.id) }}
+        {{ redirectInput('lock/requests/' ~ request.id) }}
 
-            <form method="post">
-                {{ csrfInput() }}{{ actionInput('lock/requests/note') }}
-                {{ hiddenInput('requestId', request.id) }}
-                {{ redirectInput('lock/requests/' ~ request.id) }}
-                {{ forms.textarea({name: 'note', rows: 2, placeholder: "Add a note"|t('lock')}) }}
-                <button type="submit" class="btn small">{{ "Add"|t('lock') }}</button>
-            </form>
-        </div>
-    </div>
-{% if canErase %}
-    {% js %}
-        (function() {
-            var button = document.getElementById('lock-preview');
-            var output = document.getElementById('lock-plan-output');
-            var confirmBox = document.getElementById('lock-confirm');
-            var modeField = document.getElementById('lock-mode');
+        {{ forms.selectField({
+            label: "Close as"|t('lock'),
+            id: 'status',
+            name: 'status',
+            options: [
+                {label: "Completed"|t('lock'), value: 'completed'},
+                {label: "Refused"|t('lock'), value: 'refused'},
+                {label: "Withdrawn by the subject"|t('lock'), value: 'withdrawn'},
+            ],
+        }) }}
 
-            if (!button) { return; }
+        {{ forms.textareaField({
+            label: "What they were told"|t('lock'),
+            instructions: "Required for a refusal. Article 12(4) says the subject has to be told why, and that they can complain to a supervisory authority."|t('lock'),
+            id: 'outcome',
+            name: 'outcome',
+            rows: 3,
+            value: request.outcome,
+        }) }}
 
-            // Any change to the mode invalidates the plan on screen. Leaving the old preview up
-            // next to a live button is exactly how somebody approves one thing and runs another.
-            modeField.addEventListener('change', function() {
-                output.classList.add('hidden');
-                confirmBox.classList.add('hidden');
-            });
+        {{ forms.lightswitchField({label: "Email the subject"|t('lock'), id: 'notify', name: 'notify', on: true}) }}
 
-            button.addEventListener('click', function() {
-                button.classList.add('loading');
-                output.classList.add('hidden');
-                confirmBox.classList.add('hidden');
+        <button type="submit" class="btn{{ not assembleIsPrimary ? ' submit' }}">{{ "Close the request"|t('lock') }}</button>
+    </form>
 
-                Craft.sendActionRequest('POST', 'lock/requests/plan', {
-                    data: { requestId: {{ request.id }}, mode: modeField.value }
-                }).then(function(response) {
-                    var data = response.data;
-                    output.innerHTML = data.html;
-                    output.classList.remove('hidden');
+    {% if not request.wasExtended() and request.isOpen() %}
+        <h2>{{ "Need longer?"|t('lock') }}</h2>
+        <form method="post">
+            {{ csrfInput() }}{{ actionInput('lock/requests/extend') }}
+            {{ hiddenInput('requestId', request.id) }}
+            {{ redirectInput('lock/requests/' ~ request.id) }}
+            {{ forms.textField({
+                label: "Why"|t('lock'),
+                instructions: "Article 12(3) allows two more months where a request is complex. The subject must be told within the first month, and told why. This text is what they are sent."|t('lock'),
+                id: 'reason',
+                name: 'reason',
+            }) }}
+            <button type="submit" class="btn">{{ "Claim the extension"|t('lock') }}</button>
+        </form>
+    {% endif %}
 
-                    if (data.blocked) {
-                        Craft.cp.displayError(data.blockReason);
+    {% if canErase and actionable %}
+        {% do view.registerTranslations('lock', [
+            'Carry out this plan',
+            'Carry out this plan ({n})',
+            'Could not build the plan.',
+            'Building the plan…',
+            'The plan is ready: {n} records would change.',
+            'Nothing in this plan would change anything.',
+            'Carry out this plan? The {n} records listed will be changed, and it cannot be undone.',
+        ]) %}
+
+        {% js %}
+            (function() {
+                var button = document.getElementById('lock-preview');
+                var output = document.getElementById('lock-plan-output');
+                var status = document.getElementById('lock-plan-status');
+                var confirmBox = document.getElementById('lock-confirm');
+                var confirmForm = document.getElementById('lock-confirm-form');
+                var go = document.getElementById('lock-go');
+                var fingerprint = document.getElementById('lock-confirm-fingerprint');
+                var modeField = document.getElementById('lock-mode');
+                var count = 0;
+                var busy = false;
+                var submitted = false;
+
+                if (!button) { return; }
+
+                // The carry-out button stays disabled until a plan's fingerprint is in the form. The
+                // server refuses an erase without one, and a live button next to no plan is how
+                // somebody approves nothing and expects something.
+                function disarm() {
+                    fingerprint.value = '';
+                    count = 0;
+                    go.disabled = true;
+                    go.classList.add('disabled');
+                    confirmBox.classList.add('hidden');
+                }
+
+                // Any change to the mode invalidates the plan on screen. Leaving the old preview up
+                // next to a live button is exactly how somebody approves one thing and runs another.
+                modeField.addEventListener('change', function() {
+                    output.classList.add('hidden');
+                    disarm();
+                });
+
+                button.addEventListener('click', function() {
+                    if (busy) { return; }
+                    busy = true;
+                    button.classList.add('loading');
+                    output.classList.add('hidden');
+                    disarm();
+                    status.textContent = Craft.t('lock', 'Building the plan…');
+
+                    Craft.sendActionRequest('POST', 'lock/requests/plan', {
+                        data: { requestId: {{ request.id }}, mode: modeField.value }
+                    }).then(function(response) {
+                        var data = response.data;
+                        output.innerHTML = data.html;
+                        output.classList.remove('hidden');
+
+                        if (data.blocked) {
+                            status.textContent = data.blockReason;
+                            Craft.cp.displayError(data.blockReason);
+                            return;
+                        }
+
+                        count = data.counts.erase + data.counts.anonymise;
+                        document.getElementById('lock-confirm-mode').value = modeField.value;
+                        fingerprint.value = data.fingerprint || '';
+                        go.textContent = Craft.t('lock', 'Carry out this plan ({n})', { n: count });
+
+                        if (count > 0 && fingerprint.value !== '') {
+                            go.disabled = false;
+                            go.classList.remove('disabled');
+                            confirmBox.classList.remove('hidden');
+                            status.textContent = Craft.t('lock', 'The plan is ready: {n} records would change.', { n: count });
+                        } else {
+                            status.textContent = Craft.t('lock', 'Nothing in this plan would change anything.');
+                        }
+                    }).catch(function(error) {
+                        var message = error.response && error.response.data && error.response.data.message
+                            ? error.response.data.message
+                            : Craft.t('lock', 'Could not build the plan.');
+                        status.textContent = message;
+                        Craft.cp.displayError(message);
+                    }).finally(function() {
+                        busy = false;
+                        button.classList.remove('loading');
+                    });
+                });
+
+                confirmForm.addEventListener('submit', function(event) {
+                    if (submitted || fingerprint.value === '' || go.disabled) {
+                        event.preventDefault();
                         return;
                     }
 
-                    document.getElementById('lock-confirm-mode').value = modeField.value;
-                    document.getElementById('lock-confirm-fingerprint').value = data.fingerprint;
-                    document.getElementById('lock-go').textContent = Craft.t('lock', 'Carry out this plan') +
-                        ' (' + (data.counts.erase + data.counts.anonymise) + ')';
-                    confirmBox.classList.toggle('hidden', (data.counts.erase + data.counts.anonymise) === 0);
-                }).catch(function(error) {
-                    Craft.cp.displayError(error.response && error.response.data ? error.response.data.message : 'Could not build the plan.');
-                }).finally(function() {
-                    button.classList.remove('loading');
+                    if (!window.confirm(Craft.t('lock', 'Carry out this plan? The {n} records listed will be changed, and it cannot be undone.', { n: count }))) {
+                        event.preventDefault();
+                        return;
+                    }
+
+                    submitted = true;
+                    go.disabled = true;
+                    go.classList.add('disabled', 'loading');
                 });
-            });
-        })();
-    {% endjs %}
-{% endif %}
+            })();
+        {% endjs %}
+    {% endif %}
+{% endblock %}
+
+{% block details %}
+    <h2>{{ "What has happened"|t('lock') }}</h2>
+
+    {% if timeline|length %}
+        <ul class="lock-timeline">
+            {% for event in timeline %}
+                <li>
+                    <span class="lock-when">{{ event.dateCreated|datetime('short') }}</span>
+                    <strong>{{ lock.eventType(event.type) }}</strong>
+                    {% if event.message %}<div>{{ event.message }}</div>{% endif %}
+                </li>
+            {% endfor %}
+        </ul>
+    {% else %}
+        <p class="light">{{ "Nothing yet."|t('lock') }}</p>
+    {% endif %}
+
+    <form method="post">
+        {{ csrfInput() }}{{ actionInput('lock/requests/note') }}
+        {{ hiddenInput('requestId', request.id) }}
+        {{ redirectInput('lock/requests/' ~ request.id) }}
+        {{ forms.textareaField({
+            label: "Add a note"|t('lock'),
+            instructions: "Internal. Never sent to the subject."|t('lock'),
+            id: 'lock-note',
+            name: 'note',
+            rows: 2,
+        }) }}
+        <button type="submit" class="btn small">{{ "Add"|t('lock') }}</button>
+    </form>
 {% endblock %}

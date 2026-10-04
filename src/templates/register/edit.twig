@@ -1,117 +1,153 @@
 {% extends "_layouts/cp" %}
 {% import "_includes/forms" as forms %}
 
+{# A refused save hands the entry back as a route param, errors and all. The edit action loads a
+   fresh copy, so prefer the one that came back. #}
+{% set activity = craft.app.urlManager.routeParams.activity ?? activity %}
+
 {% set title = activity.id ? activity.name : "New register entry"|t('lock') %}
 {% set selectedSubnavItem = 'register' %}
 {% set crumbs = [{label: "Record of processing"|t('lock'), url: url('lock/register')}] %}
+{% set fullPageForm = true %}
+
+{% if activity.id %}
+    {% set formActions = [
+        {
+            label: "Remove from the register"|t('lock'),
+            action: 'lock/register/delete',
+            redirect: 'lock/register'|hash,
+            destructive: true,
+            confirm: "Remove “{name}” from the register? The entry is deleted, not hidden."|t('lock', {name: activity.name}),
+            params: {activityId: activity.id},
+        },
+    ] %}
+{% endif %}
 
 {% block content %}
-    <form method="post" accept-charset="UTF-8" data-saveshortcut>
-        {{ csrfInput() }}{{ actionInput('lock/register/save') }}
-        {% if activity.id %}{{ hiddenInput('activityId', activity.id) }}{% endif %}
+    {{ actionInput('lock/register/save') }}
+    {{ redirectInput('lock/register') }}
+    {% if activity.id %}{{ hiddenInput('activityId', activity.id) }}{% endif %}
 
-        {{ forms.textField({
-            first: true,
-            label: "What the activity is"|t('lock'),
-            instructions: "Named for the purpose, not the system. “Fulfilling orders”, not “the orders table”."|t('lock'),
-            name: 'name',
-            value: activity.name,
-            required: true,
-            errors: activity.getErrors('name'),
-        }) }}
+    {{ forms.textField({
+        first: true,
+        label: "What the activity is"|t('lock'),
+        instructions: "Named for the purpose, not the system. “Fulfilling orders”, not “the orders table”."|t('lock'),
+        id: 'name',
+        name: 'name',
+        value: activity.name,
+        required: true,
+        errors: activity.getErrors('name'),
+    }) }}
 
-        {{ forms.textareaField({
-            label: "Purpose"|t('lock'),
-            instructions: "Article 30(1)(b). Why the processing happens."|t('lock'),
-            name: 'purpose',
-            rows: 3,
-            value: activity.purpose,
-        }) }}
+    {{ forms.textareaField({
+        label: "Purpose"|t('lock'),
+        instructions: "Article 30(1)(b). Why the processing happens."|t('lock'),
+        id: 'purpose',
+        name: 'purpose',
+        errors: activity.getErrors('purpose'),
+        rows: 3,
+        value: activity.purpose,
+    }) }}
 
-        {{ forms.selectField({
-            label: "Lawful basis"|t('lock'),
-            instructions: "One of the six in Article 6. There is no seventh, and “we have always done it” is not among them."|t('lock'),
-            name: 'basis',
-            options: bases|keys|map(k => {label: bases[k], value: k}),
-            value: activity.basis,
-        }) }}
+    {{ forms.selectField({
+        label: "Lawful basis"|t('lock'),
+        instructions: "One of the six in Article 6. There is no seventh, and “we have always done it” is not among them."|t('lock'),
+        id: 'basis',
+        name: 'basis',
+        errors: activity.getErrors('basis'),
+        options: bases|keys|map(k => {label: bases[k], value: k}),
+        value: activity.basis,
+    }) }}
 
-        {{ forms.textareaField({
-            label: "Balancing test"|t('lock'),
-            instructions: "Needed when the basis is legitimate interests: the interest pursued, and why it is not overridden by the rights of the people concerned. An entry claiming legitimate interests with this empty is the commonest defect in a register."|t('lock'),
-            name: 'balancing',
-            rows: 3,
-            value: activity.balancing,
-        }) }}
+    {{ forms.textareaField({
+        label: "Balancing test"|t('lock'),
+        instructions: "Needed when the basis is legitimate interests: the interest pursued, and why it is not overridden by the rights of the people concerned. An entry claiming legitimate interests with this empty is the commonest defect in a register."|t('lock'),
+        id: 'balancing',
+        name: 'balancing',
+        errors: activity.getErrors('balancing'),
+        rows: 3,
+        value: activity.balancing,
+    }) }}
 
-        {{ forms.textareaField({
-            label: "Categories of personal data"|t('lock'),
-            instructions: "One per line. Article 30(1)(c)."|t('lock'),
-            name: 'dataCategories',
-            rows: 3,
-            value: activity.dataCategories|join("\n"),
-        }) }}
+    {{ forms.textareaField({
+        label: "Categories of personal data"|t('lock'),
+        instructions: "One per line. Article 30(1)(c)."|t('lock'),
+        id: 'dataCategories',
+        name: 'dataCategories',
+        errors: activity.getErrors('dataCategories'),
+        rows: 3,
+        value: activity.dataCategories|join("\n"),
+    }) }}
 
-        {{ forms.textareaField({
-            label: "Categories of people"|t('lock'),
-            instructions: "One per line: customers, applicants, employees, subscribers."|t('lock'),
-            name: 'subjectCategories',
-            rows: 2,
-            value: activity.subjectCategories|join("\n"),
-        }) }}
+    {{ forms.textareaField({
+        label: "Categories of people"|t('lock'),
+        instructions: "One per line: customers, applicants, employees, subscribers."|t('lock'),
+        id: 'subjectCategories',
+        name: 'subjectCategories',
+        errors: activity.getErrors('subjectCategories'),
+        rows: 2,
+        value: activity.subjectCategories|join("\n"),
+    }) }}
 
-        {{ forms.textareaField({
-            label: "Who it is disclosed to"|t('lock'),
-            instructions: "One per line. Article 30(1)(d) — processors count: the host, the mail service, the payment gateway."|t('lock'),
-            name: 'recipients',
-            rows: 3,
-            value: activity.recipients|join("\n"),
-        }) }}
+    {{ forms.textareaField({
+        label: "Who it is disclosed to"|t('lock'),
+        instructions: "One per line. Article 30(1)(d). Processors count: the host, the mail service, the payment gateway."|t('lock'),
+        id: 'recipients',
+        name: 'recipients',
+        errors: activity.getErrors('recipients'),
+        rows: 3,
+        value: activity.recipients|join("\n"),
+    }) }}
 
-        {{ forms.textField({
-            label: "Transfers outside the EEA"|t('lock'),
-            instructions: "Article 30(1)(e). Name the country and the safeguard relied on."|t('lock'),
-            name: 'transfers',
-            value: activity.transfers,
-        }) }}
+    {{ forms.textField({
+        label: "Transfers outside the EEA"|t('lock'),
+        instructions: "Article 30(1)(e). Name the country and the safeguard relied on."|t('lock'),
+        id: 'transfers',
+        name: 'transfers',
+        errors: activity.getErrors('transfers'),
+        value: activity.transfers,
+    }) }}
 
-        {{ forms.textField({
-            label: "How long it is kept"|t('lock'),
-            instructions: "Article 30(1)(f). If a retention rule enforces this, say the same number here — a register that states one period while the site enforces another is the discrepancy an inspection finds."|t('lock'),
-            name: 'retention',
-            value: activity.retention,
-        }) }}
+    {{ forms.textField({
+        label: "How long it is kept"|t('lock'),
+        instructions: "Article 30(1)(f). If a retention rule enforces this, say the same number here. A register that states one period while the site enforces another is the discrepancy an inspection finds."|t('lock'),
+        id: 'retention',
+        name: 'retention',
+        errors: activity.getErrors('retention'),
+        value: activity.retention,
+    }) }}
 
-        {{ forms.textareaField({
-            label: "Security measures"|t('lock'),
-            instructions: "Article 30(1)(g), in outline."|t('lock'),
-            name: 'safeguards',
-            rows: 2,
-            value: activity.safeguards,
-        }) }}
+    {{ forms.textareaField({
+        label: "Security measures"|t('lock'),
+        instructions: "Article 30(1)(g), in outline."|t('lock'),
+        id: 'safeguards',
+        name: 'safeguards',
+        errors: activity.getErrors('safeguards'),
+        rows: 2,
+        value: activity.safeguards,
+    }) }}
 
-        {{ forms.checkboxGroupField({
-            label: "Where it lives"|t('lock'),
-            instructions: "The sources Lock searches. Anything ticked here counts as accounted for when the register is checked against the site."|t('lock'),
-            name: 'systems',
-            options: sources|keys|map(k => {label: sources[k], value: k}),
-            values: activity.systems,
-        }) }}
+    {{ forms.checkboxGroupField({
+        label: "Where it lives"|t('lock'),
+        instructions: "The sources Lock searches. Anything ticked here counts as accounted for when the register is checked against the site."|t('lock'),
+        id: 'systems',
+        name: 'systems',
+        errors: activity.getErrors('systems'),
+        options: sources|keys|map(k => {label: sources[k], value: k}),
+        values: activity.systems,
+    }) }}
 
-        {{ forms.textField({label: "Owner"|t('lock'), name: 'owner', value: activity.owner}) }}
-        {{ forms.textField({label: "Order"|t('lock'), name: 'sortOrder', type: 'number', size: 4, value: activity.sortOrder}) }}
-        {{ forms.lightswitchField({label: "Include in the register"|t('lock'), name: 'enabled', on: activity.enabled}) }}
+    {{ forms.textField({label: "Owner"|t('lock'), id: 'owner', name: 'owner', value: activity.owner, errors: activity.getErrors('owner')}) }}
 
-        <div class="buttons">
-            <button type="submit" class="btn submit">{{ "Save"|t('lock') }}</button>
-        </div>
-    </form>
+    {{ forms.textField({
+        label: "Order"|t('lock'),
+        id: 'sortOrder',
+        name: 'sortOrder',
+        type: 'number',
+        value: activity.sortOrder,
+        inputAttributes: {style: {width: '8em'}},
+        errors: activity.getErrors('sortOrder'),
+    }) }}
 
-    {% if activity.id %}
-        <form method="post" style="margin-top:24px;">
-            {{ csrfInput() }}{{ actionInput('lock/register/delete') }}{{ redirectInput('lock/register') }}
-            {{ hiddenInput('activityId', activity.id) }}
-            <button type="submit" class="btn small">{{ "Remove from the register"|t('lock') }}</button>
-        </form>
-    {% endif %}
+    {{ forms.lightswitchField({label: "Include in the register"|t('lock'), id: 'enabled', name: 'enabled', on: activity.enabled}) }}
 {% endblock %}

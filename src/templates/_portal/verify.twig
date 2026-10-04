@@ -1,0 +1,24 @@
+{% extends "lock/_portal/_shell" %}
+{% set pageTitle = "Confirm your request"|t('lock') %}
+
+{#- The verification link lands here, and nothing has happened yet. Mail filters and link
+    previewers open every link in an email, so the link itself must not confirm anything: the
+    button does. Nothing personal is shown — whoever opened the link already has the email. -#}
+
+{% block body %}
+    <h1>{{ pageTitle }}</h1>
+
+    <p>{{ "Press the button to confirm that you made request {reference}. Until you do, nothing happens to it."|t('lock', {reference: request.reference}) }}</p>
+
+    <form method="post" action="">
+        {{ csrfInput() }}
+        {{ actionInput('lock/portal/verify') }}
+        <input type="hidden" name="code" value="{{ code }}">
+
+        <button type="submit">{{ "Yes, this was me"|t('lock') }}</button>
+    </form>
+
+    <p class="muted" style="margin-top:1.5rem;">
+        {{ "If you did not ask us for anything, ignore the email and this page. The request will lapse on its own."|t('lock') }}
+    </p>
+{% endblock %}

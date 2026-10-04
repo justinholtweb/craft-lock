@@ -8,11 +8,23 @@ use craft\web\Controller;
 use justinholtweb\lock\models\ConsentEntry;
 use justinholtweb\lock\models\Settings;
 use justinholtweb\lock\Plugin;
+use justinholtweb\lock\records\ActivityRecord;
 use yii\web\Response;
 
 /** The consent ledger, from the desk side: who allows what, and what they were shown. */
 class ConsentController extends Controller
 {
+    public function beforeAction($action): bool
+    {
+        if (!parent::beforeAction($action)) {
+            return false;
+        }
+
+        $this->requireCpRequest();
+
+        return true;
+    }
+
     public function actionIndex(): Response
     {
         $this->requirePermission(Plugin::PERMISSION_VIEW);
@@ -61,10 +73,15 @@ class ConsentController extends Controller
         return $this->asSuccess(Craft::t('lock', 'Recorded.'));
     }
 
-    /** The whole ledger as JSON, for a regulator, an auditor, or a migration off this site. */
+    /**
+     * The whole ledger as JSON, for a regulator, an auditor, or a migration off this site.
+     *
+     * Needs the manage permission, not just view: this is every address on the ledger in one
+     * file, which is a bulk export of personal data, and it is logged as one.
+     */
     public function actionExport(): Response
     {
-        $this->requirePermission(Plugin::PERMISSION_VIEW);
+        $this->requirePermission(Plugin::PERMISSION_MANAGE);
 
         $rows = array_map(static fn(ConsentEntry $e) => [
             'email' => $e->email,
@@ -76,6 +93,15 @@ class ConsentController extends Controller
             'policy_version' => $e->policyVersion,
             'evidence' => $e->evidence,
         ], Plugin::getInstance()->consent->find([], 100000));
+
+        Plugin::getInstance()->activity->log(
+            ActivityRecord::CATEGORY_ACCESS,
+            'consent.exported',
+            Craft::t('lock', 'The consent ledger was exported ({n} records).', ['n' => count($rows)]),
+            null,
+            null,
+            ['rows' => count($rows)],
+        );
 
         return $this->asRaw(Json::encode($rows, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES))
             ->setDownloadHeaders('lock-consent-' . date('Ymd') . '.json', 'application/json');

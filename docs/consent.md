@@ -1,3 +1,10 @@
+---
+title: Consent
+slug: consent
+order: 40
+summary: A ledger about people rather than browsers, and what Article 7(1) needs you to be able to show.
+---
+
 # Consent
 
 ## What this is, and what a cookie banner is
@@ -29,7 +36,7 @@ true would turn every unknown visitor into a lawful marketing target.
 
 ## Recording
 
-A preferences form can post straight to Lock:
+A preferences page for signed-in members can post straight to Lock:
 
 ```twig
 <form method="post">
@@ -50,8 +57,37 @@ A preferences form can post straight to Lock:
 </form>
 ```
 
-A signed-in visitor may only record consent for themselves. Without that rule the endpoint is a
-way to record that somebody *else* agreed to marketing.
+**Signed in**, the decision is recorded against the account's own address, whatever address was
+posted, and both grants and withdrawals count. That is the only case where Lock knows whose
+decision it is.
+
+**Signed out**, the endpoint takes withdrawals only, and says the same thing whatever happened:
+
+```twig
+<form method="post">
+    {{ csrfInput() }}
+    {{ actionInput('lock/portal/consent') }}
+    {{ redirectInput('unsubscribed') }}
+    <input type="email" name="email" required>
+    {# no purposes[] posted: every purpose is withdrawn #}
+    <button>Unsubscribe me</button>
+</form>
+```
+
+- A **grant** from an anonymous form is ignored. Anybody could otherwise sign anybody up to
+  marketing, and the ledger would hold a "consent" the person never gave — the opposite of what
+  Article 7(1) asks you to be able to demonstrate. Ask people to sign in, or to confirm by email
+  through your own flow, before recording a grant.
+- A **withdrawal** is honoured, because Article 7(3) requires withdrawing to be as easy as giving,
+  and an unsubscribe form cannot demand a login. The worst a forged withdrawal can do is stop the
+  site emailing somebody. It is marked `"verified": false` in the evidence, so the ledger never
+  claims more than it knows.
+- The response never includes the address's consent state, and is the same whether anything was
+  recorded, nothing needed changing, the address is unknown, or the caller was rate limited.
+  "Here is what this address agreed to" for any address you type would be a lookup service.
+
+Both are rate limited per address and per IP. `policyVersion`, if posted, is kept to its first 64
+characters.
 
 Only a **change** is written. Re-recording the same answer on every page view would make the
 ledger unreadable and bury the decisions that matter.
@@ -77,6 +113,11 @@ you how many there are. Nothing is revoked automatically; it is a prompt to ask 
 `consent:superseded` is the retention scope for the ledger. It anonymises decisions that a later
 decision has already replaced, and never touches the current answer for a purpose whatever its
 age.
+
+Anonymising a consent record — by that rule or by an erasure — replaces the address with the
+subject's pseudonym and clears the IP address, browser and page from the evidence. The purpose,
+the decision, the date, the wording and the policy version stay, with the keyed hash that ties
+them to the person if they ever come back and dispute it.
 
 ## Purposes
 

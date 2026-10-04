@@ -28,9 +28,19 @@ class SettingsController extends Controller
             return false;
         }
 
-        $this->requireAdmin();
+        // Admins may always look; whether they may change anything is a separate question,
+        // answered by allowAdminChanges on the write action alone. Gating the whole controller
+        // with requireAdmin() would make the settings unreadable on production, which is exactly
+        // where somebody needs to check what the retention rules are.
+        $this->requireAdmin(false);
 
         return true;
+    }
+
+    /** Whether this environment lets settings be changed, which project config decides. */
+    private function readOnly(): bool
+    {
+        return !Craft::$app->getConfig()->getGeneral()->allowAdminChanges;
     }
 
     public function actionIndex(): Response
@@ -39,6 +49,7 @@ class SettingsController extends Controller
             'settings' => Plugin::getInstance()->getSettings(),
             'requestTypes' => Request::types(),
             'isPro' => Plugin::getInstance()->isPro(),
+            'readOnly' => $this->readOnly(),
         ]);
     }
 
@@ -61,6 +72,7 @@ class SettingsController extends Controller
         return $this->renderTemplate('lock/settings/collectors', [
             'settings' => $plugin->getSettings(),
             'collectors' => $collectors,
+            'readOnly' => $this->readOnly(),
         ]);
     }
 
@@ -89,12 +101,14 @@ class SettingsController extends Controller
                 RetentionRule::MODE_ERASE => Craft::t('lock', 'Delete'),
                 RetentionRule::MODE_REPORT => Craft::t('lock', 'Report only'),
             ],
+            'readOnly' => $this->readOnly(),
         ]);
     }
 
     public function actionSave(): ?Response
     {
         $this->requirePostRequest();
+        $this->requireAdmin();
 
         $plugin = Plugin::getInstance();
         /** @var Settings $settings */
@@ -111,7 +125,28 @@ class SettingsController extends Controller
             return $this->asModelFailure($settings, Craft::t('lock', 'Could not save those settings.'), 'settings');
         }
 
-        if (!Craft::$app->getPlugins()->savePluginSettings($plugin, $settings->toArray())) {
+        // The posted keys are merged over what is already stored, not over what is in effect. A
+        // setting pinned in config/lock.php (intakeGlobalLimit has no field at all) is in the
+        // live model, and writing the live model back would copy the file's value into project
+        // config, where it would outlive the file. So for every key the file sets and this
+        // screen did not post, keep whatever project config already held, or nothing.
+        $data = $settings->toArray();
+        $stored = Craft::$app->getPlugins()->getStoredPluginInfo($plugin->handle)['settings'] ?? [];
+        $fromFile = Craft::$app->getConfig()->getConfigFromFile($plugin->handle);
+
+        foreach (array_keys(is_array($fromFile) ? $fromFile : []) as $key) {
+            if (array_key_exists($key, $posted)) {
+                continue;
+            }
+
+            if (array_key_exists($key, $stored)) {
+                $data[$key] = $stored[$key];
+            } else {
+                unset($data[$key]);
+            }
+        }
+
+        if (!Craft::$app->getPlugins()->savePluginSettings($plugin, $data)) {
             return $this->asModelFailure($settings, Craft::t('lock', 'Could not save those settings.'), 'settings');
         }
 

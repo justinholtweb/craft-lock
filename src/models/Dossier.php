@@ -135,7 +135,7 @@ class Dossier extends Model
                 'notes' => $bundle->notes,
                 'problems' => $bundle->errors,
                 'records' => array_map(static fn(DataRecord $r) => $r->toDisclosure(), $bundle->records),
-            ], static fn($v) => $v !== null && $v !== []);
+            ], static fn($v) => $v !== []);
         }
 
         return [

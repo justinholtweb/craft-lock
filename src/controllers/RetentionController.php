@@ -5,6 +5,7 @@ namespace justinholtweb\lock\controllers;
 use Craft;
 use craft\web\Controller;
 use craft\web\View;
+use justinholtweb\lock\models\RetentionRule;
 use justinholtweb\lock\Plugin;
 use yii\web\ForbiddenHttpException;
 use yii\web\NotFoundHttpException;
@@ -25,6 +26,8 @@ class RetentionController extends Controller
             return false;
         }
 
+        $this->requireCpRequest();
+
         if (!Plugin::getInstance()->isPro()) {
             throw new ForbiddenHttpException(Craft::t('lock', 'Retention rules are a Pro feature.'));
         }
@@ -37,7 +40,7 @@ class RetentionController extends Controller
         $this->requirePermission(Plugin::PERMISSION_VIEW);
 
         $retention = Plugin::getInstance()->retention;
-        $rules = $retention->rules();
+        $rules = $retention->allRules();
         $lastRuns = [];
 
         foreach ($rules as $key => $rule) {
@@ -57,6 +60,7 @@ class RetentionController extends Controller
     /** What a rule would do, without doing it. */
     public function actionPreview(): Response
     {
+        $this->requirePostRequest();
         $this->requirePermission(Plugin::PERMISSION_RETENTION);
 
         $rule = Plugin::getInstance()->retention->rule((string)$this->request->getParam('key', ''));
@@ -90,6 +94,12 @@ class RetentionController extends Controller
 
         if ($rule === null) {
             throw new NotFoundHttpException(Craft::t('lock', 'No such rule.'));
+        }
+
+        // A rule that deletes or anonymises asks for the password again; the CP button carries
+        // data-require-elevated-session for those rules only, so a report-only rule does not.
+        if ($rule->mode !== RetentionRule::MODE_REPORT) {
+            $this->requireElevatedSession();
         }
 
         $dryRun = (bool)$this->request->getBodyParam('dryRun', false);
