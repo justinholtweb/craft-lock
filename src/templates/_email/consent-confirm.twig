@@ -1,0 +1,25 @@
+{% extends "lock/_email/_shell" %}
+{% block body %}
+    <p>{{ "Somebody — we hope you — filled in a form on our site with this address and ticked a box agreeing to:"|t('lock') }}</p>
+
+    <ul>
+        {% for purpose in purposes %}
+            <li>{{ purpose }}</li>
+        {% endfor %}
+    </ul>
+
+    <p>{{ "We will not act on it until you confirm it was you."|t('lock') }}</p>
+
+    <p style="margin:24px 0;">
+        <a href="{{ url }}" style="background:#2a2f36;color:#fff;padding:12px 20px;border-radius:5px;text-decoration:none;display:inline-block;">
+            {{ "Yes, I agree"|t('lock') }}
+        </a>
+    </p>
+
+    <p style="font-size:13px;color:#69717a;">{{ "Or paste this into your browser:"|t('lock') }}<br>{{ url }}</p>
+
+    {# Somebody whose address a stranger typed finds out here, and learns that nothing follows. #}
+    <p style="font-size:13px;color:#69717a;">
+        {{ "If this was not you, or you have changed your mind, do nothing. The link stops working on {date} and nothing will be recorded."|t('lock', {date: expiresAt|date('j F Y, H:i')}) }}
+    </p>
+{% endblock %}

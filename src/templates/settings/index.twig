@@ -280,6 +280,40 @@
         errors: settings.getErrors('consentExpiryMonths'),
         disabled: readOnly,
     }) }}
+    {% set purposeOptions = [] %}
+    {% for key, label in settings.purposeOptions() %}
+        {% set purposeOptions = purposeOptions|merge([{label: label, value: key}]) %}
+    {% endfor %}
+
+    {{ forms.editableTableField({
+        label: "Consent from Formie and Freeform"|t('lock'),
+        instructions: "A ticked box on these forms becomes a consent decision. From somebody signed in, for their own address, it is recorded at once; from anybody else, a grant waits until the person confirms it from an email we send them. Withdrawals apply at once. Leave the email field blank to use the form’s first email field, and the wording blank to use the field’s own label or description."|t('lock'),
+        name: 'settings[formConsents]',
+        id: 'formConsents',
+        cols: {
+            plugin: {heading: "Plugin"|t('lock'), type: 'select', width: '12%', options: [
+                {label: 'Formie', value: 'formie'},
+                {label: 'Freeform', value: 'freeform'},
+            ]},
+            form: {heading: "Form handle"|t('lock'), type: 'singleline', code: true},
+            field: {heading: "Checkbox field"|t('lock'), type: 'singleline', code: true},
+            emailField: {heading: "Email field"|t('lock'), type: 'singleline', code: true},
+            purpose: {heading: "Purpose"|t('lock'), type: 'select', options: purposeOptions},
+            action: {heading: "When ticked"|t('lock'), type: 'select', width: '12%', options: [
+                {label: "Grant"|t('lock'), value: 'grant'},
+                {label: "Withdraw"|t('lock'), value: 'withdraw'},
+            ]},
+            wording: {heading: "Wording shown"|t('lock'), type: 'singleline'},
+        },
+        rows: settings.formConsents,
+        allowAdd: true,
+        allowDelete: true,
+        allowReorder: true,
+        addRowLabel: "Add a form field"|t('lock'),
+        static: readOnly,
+        errors: settings.getErrors('formConsents'),
+    }) }}
+
     {{ forms.lightswitchField({
         label: "Include Toss’s records"|t('lock'),
         instructions: "Reads cookie decisions and policy acceptances recorded by Toss into disclosures."|t('lock'),

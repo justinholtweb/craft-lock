@@ -10,6 +10,10 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="robots" content="noindex, nofollow">
+    {#- The verification and confirmation links carry their code in the path. A header can be
+        overridden further down the stack (a server or another plugin adding its own policy);
+        the meta tag cannot. -#}
+    <meta name="referrer" content="no-referrer">
     <title>{{ pageTitle ?? "Your data"|t('lock') }} — {{ craft.app.systemName }}</title>
     <style>
         :root { color-scheme: light dark; }

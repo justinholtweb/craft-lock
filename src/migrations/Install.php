@@ -32,6 +32,7 @@ class Install extends Migration
         $this->requests();
         $this->requestEvents();
         $this->consents();
+        $this->pendingConsents();
         $this->activity();
         $this->processing();
         $this->runs();
@@ -48,6 +49,7 @@ class Install extends Migration
         $this->dropTableIfExists('{{%lock_runs}}');
         $this->dropTableIfExists('{{%lock_processing}}');
         $this->dropTableIfExists('{{%lock_activity}}');
+        $this->dropTableIfExists('{{%lock_pendingconsents}}');
         $this->dropTableIfExists('{{%lock_consents}}');
         $this->dropTableIfExists('{{%lock_requestevents}}');
         $this->dropTableIfExists('{{%lock_requests}}');
@@ -175,6 +177,46 @@ class Install extends Migration
         // SET NULL, not CASCADE. Deleting a site must not delete the proof that people on it
         // consented — Article 7(1) does not lapse because a site was retired.
         $this->addForeignKey(null, '{{%lock_consents}}', ['siteId'], Table::SITES, ['id'], 'SET NULL', null);
+    }
+
+    /**
+     * Form consent waiting for its emailed confirmation. Public so the migration that added it
+     * runs this very method.
+     *
+     * It holds the address in the clear because it has to email it. That is why every row is
+     * short-lived — deleted on confirmation, on expiry and on erasure — and why the token is
+     * stored only as its hash.
+     */
+    public function pendingConsents(): void
+    {
+        if ($this->db->tableExists('{{%lock_pendingconsents}}')) {
+            return;
+        }
+
+        $this->createTable('{{%lock_pendingconsents}}', [
+            'id' => $this->primaryKey(),
+            'email' => $this->string()->notNull(),
+            'emailHash' => $this->string(64)->notNull(),
+            // [{purpose, text, field}] — one entry per ticked box the form maps.
+            'grants' => $this->json()->notNull(),
+            // Shared circumstances: page, IP, browser, form, submission.
+            'evidence' => $this->json(),
+            'source' => $this->string(32)->notNull(),
+            'form' => $this->string(),
+            'siteId' => $this->integer()->null(),
+            'tokenHash' => $this->char(64)->notNull(),
+            'expiresAt' => $this->dateTime()->notNull(),
+            'dateCreated' => $this->dateTime()->notNull(),
+            'dateUpdated' => $this->dateTime()->notNull(),
+            'uid' => $this->uid(),
+        ]);
+
+        $this->createIndex(null, '{{%lock_pendingconsents}}', ['tokenHash'], true);
+        $this->createIndex(null, '{{%lock_pendingconsents}}', ['emailHash'], false);
+        $this->createIndex(null, '{{%lock_pendingconsents}}', ['email'], false);
+        $this->createIndex(null, '{{%lock_pendingconsents}}', ['expiresAt'], false);
+
+        $this->addForeignKey(null, '{{%lock_pendingconsents}}', ['siteId'], Table::SITES, ['id'], 'SET NULL', null);
     }
 
     private function activity(): void

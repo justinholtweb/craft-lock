@@ -1,5 +1,30 @@
 # Release Notes for Lock
 
+## Unreleased
+
+### Added
+
+- **Consent from Formie and Freeform forms, confirmed by email.** Map a form's checkbox or agree
+  field to a purpose under *Settings → Consent* (`formConsents`), as a grant or a withdrawal. A
+  grant from somebody signed in, for their own address, is recorded at once. A grant from anybody
+  else waits: Lock emails the address a link, and records the grant, marked verified, only when
+  the button on that link's page is pressed. The link works once, expires after
+  `verificationTtl` hours, is stored only as a hash, and opening it changes nothing, so a mail
+  scanner can't confirm anybody. Withdrawals apply at once, as before. The form's own response is
+  the same whatever Lock did, and the confirmation email shares the intake form's rate limit. In
+  Lite.
+- Waiting confirmations are counted on the Consent screen, disclosed in a subject's dossier,
+  deleted by an erasure, and deleted by garbage collection once their link expires.
+- `formConsent->capture()`, for sites with their own form handler.
+
+### Changed
+
+- The portal pages carry `<meta name="referrer" content="no-referrer">`, so the code in a
+  verification or confirmation link can't leak through the `Referer` header even where a server
+  sets its own `Referrer-Policy`.
+- The rate limit moved from the portal controller to `helpers\RateLimit`.
+  `PortalController::rateKeyForEmail()` still works.
+
 ## 5.0.0 - 2026-10-03
 
 Initial release.

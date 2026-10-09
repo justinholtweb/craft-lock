@@ -40,6 +40,24 @@ class Notifications extends Component
         ]), ['url' => $url]);
     }
 
+    /**
+     * Asks the person at an address to confirm consent ticked on a form.
+     *
+     * Sent whatever *Email the subject* says: it is not a notification but the only way the
+     * consent can ever reach the ledger. It says what was asked for and that doing nothing is
+     * fine, because the person reading it may never have seen the form.
+     *
+     * @param string[] $purposes
+     */
+    public function sendConsentConfirmation(string $email, string $url, array $purposes, \DateTime $expiresAt): bool
+    {
+        return $this->send([$email], Craft::t('lock', 'Please confirm your consent'), 'consent-confirm', [
+            'url' => $url,
+            'purposes' => $purposes,
+            'expiresAt' => $expiresAt,
+        ]);
+    }
+
     public function sendAcknowledgement(Request $request): bool
     {
         return $this->toSubject($request, 'acknowledge', Craft::t('lock', 'We have your request ({reference})', [

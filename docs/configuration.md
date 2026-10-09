@@ -47,7 +47,7 @@ return [
 | `intakeEnabled` | `true` | |
 | `intakeTypes` | all six | which request types the public form may submit |
 | `requireVerification` | `true` | **leave this on** — see below |
-| `verificationTtl` | `48` | hours a confirmation link lives |
+| `verificationTtl` | `48` | hours a confirmation link lives — for requests and for consent from forms |
 | `intakeRateLimit` | `5` | per hour, per address *and* per IP; 0 disables |
 | `intakeGlobalLimit` | `200` | per hour across the whole site; 0 disables. `config/lock.php` only |
 | `trustSignedInSubjects` | `true` | skips confirmation for somebody asking about their own signed-in address |
@@ -60,7 +60,9 @@ The per-address limit counts the cheap spellings of one mailbox as one: case, `+
 Gmail the dots and `googlemail.com`. The site-wide limit is the backstop against a script spread
 over many IPs, each naming a different address — every accepted submission sends an email. Every
 limited submission gets exactly the answer a genuine one does. The status lookup and the consent
-form are limited too, at four times `intakeRateLimit`.
+form are limited too, at four times `intakeRateLimit`. Consent confirmations sent for Formie and
+Freeform submissions share the intake budget: `intakeRateLimit` per address and per IP, and
+`intakeGlobalLimit` site-wide.
 
 ### Behind a proxy or CDN
 
@@ -147,6 +149,23 @@ a spreadsheet would run as a formula.
 | `consentPurposes` | four | key, label, description, basis — **renaming a key orphans its history** |
 | `consentExpiryMonths` | `24` | after which a record is flagged stale; 0 never expires |
 | `adoptToss` | `true` | reads Toss's consent and acceptance rows into disclosures |
+| `formConsents` | `[]` | Formie and Freeform checkboxes that capture consent — see [Consent](consent.md#formie-and-freeform) |
+
+A `formConsents` row, in `config/lock.php` or *Settings → Consent*:
+
+```php
+'formConsents' => [
+    [
+        'plugin' => 'formie',          // or 'freeform'
+        'form' => 'contact',           // the form's handle
+        'field' => 'newsletter',       // the agree/checkbox field's handle
+        'emailField' => '',            // blank: the form's first email field
+        'purpose' => 'marketing',      // a key from consentPurposes
+        'action' => 'grant',           // or 'withdraw'
+        'wording' => '',               // blank: the field's own description or label
+    ],
+],
+```
 
 ## Retention
 

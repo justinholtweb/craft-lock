@@ -1,0 +1,30 @@
+{% extends "lock/_portal/_shell" %}
+{% set pageTitle = "Confirm your consent"|t('lock') %}
+
+{#- The link in the confirmation email lands here, and nothing has happened yet. Mail filters open
+    every link in an email, so the link itself must not confirm anything: the button does. The
+    address is not shown — whoever opened the link already has the email. -#}
+
+{% block body %}
+    <h1>{{ pageTitle }}</h1>
+
+    <p>{{ "Press the button to confirm that you agree to:"|t('lock') }}</p>
+
+    <ul>
+        {% for purpose in purposes %}
+            <li>{{ purpose }}</li>
+        {% endfor %}
+    </ul>
+
+    <form method="post" action="">
+        {{ csrfInput() }}
+        {{ actionInput('lock/portal/confirm') }}
+        <input type="hidden" name="code" value="{{ code }}">
+
+        <button type="submit">{{ "Yes, I agree"|t('lock') }}</button>
+    </form>
+
+    <p class="muted" style="margin-top:1.5rem;">
+        {{ "If you did not fill in a form on our site, ignore the email and this page. Nothing will be recorded."|t('lock') }}
+    </p>
+{% endblock %}

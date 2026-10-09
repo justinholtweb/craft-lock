@@ -1,0 +1,16 @@
+{% extends "lock/_portal/_shell" %}
+{% set pageTitle = ok ? "Confirmed"|t('lock') : "That link has expired"|t('lock') %}
+
+{% block body %}
+    <h1>{{ pageTitle }}</h1>
+
+    <div class="panel{{ ok ? '' : ' bad' }}">{{ message }}</div>
+
+    {% if ok and purposes is defined and purposes %}
+        <ul>
+            {% for purpose in purposes %}
+                <li>{{ purpose }}</li>
+            {% endfor %}
+        </ul>
+    {% endif %}
+{% endblock %}

@@ -29,6 +29,12 @@
         {% endfor %}
     </div>
 
+    {% if pending %}
+        <p class="light">
+            {{ "{n} consents ticked on Formie or Freeform forms are waiting for the person to confirm them by email. They are not in the ledger, and are not counted above, until they do."|t('lock', {n: pending}) }}
+        </p>
+    {% endif %}
+
     {% if stale|length %}
         <div class="readable"><blockquote class="note warning">
             <strong>{{ "{n} consent records are past their re-ask date."|t('lock', {n: stale|length}) }}</strong>

@@ -18,6 +18,7 @@ use justinholtweb\lock\services\Collectors;
 use justinholtweb\lock\services\Consent;
 use justinholtweb\lock\services\Dossiers;
 use justinholtweb\lock\services\Erasure;
+use justinholtweb\lock\services\FormConsent;
 use justinholtweb\lock\services\Holds;
 use justinholtweb\lock\services\Notifications;
 use justinholtweb\lock\services\Register;
@@ -50,6 +51,7 @@ use yii\base\Event;
  * @property-read Collectors $collectors
  * @property-read Erasure $erasure
  * @property-read Consent $consent
+ * @property-read FormConsent $formConsent
  * @property-read Activity $activity
  * @property-read Register $register
  * @property-read Retention $retention
@@ -85,7 +87,7 @@ class Plugin extends BasePlugin
 
     public const LOG_CATEGORY = 'lock';
 
-    public string $schemaVersion = '1.0.0';
+    public string $schemaVersion = '1.1.0';
     public bool $hasCpSection = true;
     public bool $hasCpSettings = true;
 
@@ -113,6 +115,7 @@ class Plugin extends BasePlugin
                 'collectors' => Collectors::class,
                 'erasure' => Erasure::class,
                 'consent' => Consent::class,
+                'formConsent' => FormConsent::class,
                 'activity' => Activity::class,
                 'register' => Register::class,
                 'retention' => Retention::class,
@@ -133,6 +136,9 @@ class Plugin extends BasePlugin
         $this->registerTwigVariable();
         $this->registerScheduleTrigger();
         $this->registerGarbageCollection();
+
+        // Formie and Freeform submissions. Lite: consent capture is part of keeping the ledger.
+        $this->formConsent->attach();
     }
 
     /**
@@ -148,20 +154,22 @@ class Plugin extends BasePlugin
     }
 
     /**
-     * Expires unconfirmed requests whose link has lapsed, and deletes dossier archives past
-     * their window. Returns what it did, for the caller that wants to know.
+     * Expires unconfirmed requests whose link has lapsed, deletes form consent nobody confirmed
+     * in time, and deletes dossier archives past their window. Returns what it did, for the
+     * caller that wants to know.
      *
      * Neither is a Pro feature: a stale archive is the most concentrated personal data on the
      * site, and Lite has to clean up after itself as much as Pro does.
      *
-     * @return array{expired: int, dossiers: int}
+     * @return array{expired: int, dossiers: int, pendingConsents: int}
      */
     public function collectGarbage(): array
     {
-        $result = ['expired' => 0, 'dossiers' => 0];
+        $result = ['expired' => 0, 'dossiers' => 0, 'pendingConsents' => 0];
 
         try {
             $result['expired'] = $this->requests->expireUnverified();
+            $result['pendingConsents'] = $this->formConsent->expirePending();
             $result['dossiers'] = $this->dossiers->prune();
         } catch (\Throwable $e) {
             // Garbage collection runs on somebody's page load. It must never be the reason it fails.
@@ -345,6 +353,9 @@ class Plugin extends BasePlugin
                 $event->rules['lock/verify/<code:[^\/]+>'] = 'lock/portal/verify';
                 $event->rules['lock/verify'] = 'lock/portal/verify';
                 $event->rules['lock/status'] = 'lock/portal/status';
+                // Consent ticked on a Formie or Freeform form, confirmed from the emailed link.
+                $event->rules['lock/confirm/<code:[^\/]+>'] = 'lock/portal/confirm';
+                $event->rules['lock/confirm'] = 'lock/portal/confirm';
             },
         );
     }

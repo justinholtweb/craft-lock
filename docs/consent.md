@@ -76,8 +76,8 @@ decision it is.
 
 - A **grant** from an anonymous form is ignored. Anybody could otherwise sign anybody up to
   marketing, and the ledger would hold a "consent" the person never gave — the opposite of what
-  Article 7(1) asks you to be able to demonstrate. Ask people to sign in, or to confirm by email
-  through your own flow, before recording a grant.
+  Article 7(1) asks you to be able to demonstrate. Ask people to sign in, or collect it through a
+  [Formie or Freeform form](#formie-and-freeform), where Lock confirms it by email first.
 - A **withdrawal** is honoured, because Article 7(3) requires withdrawing to be as easy as giving,
   and an unsubscribe form cannot demand a login. The worst a forged withdrawal can do is stop the
   site emailing somebody. It is marked `"verified": false` in the evidence, so the ledger never
@@ -94,6 +94,66 @@ ledger unreadable and bury the decisions that matter.
 
 `wording` is worth filling in. When somebody disputes it in two years, the useful record is not
 "granted 2026-08-27" but the sentence they were shown when they granted it.
+
+## Formie and Freeform
+
+Most consent on a Craft site is a ticked box on a Formie or Freeform form. Map the box to a purpose
+in *Settings → Consent → Consent from Formie and Freeform* (or `formConsents` in
+`config/lock.php`, see [Configuration](configuration.md#consent)): the plugin, the form handle, the
+checkbox or agree field, the purpose, and whether ticking it **grants** or **withdraws**. Lock
+finds the address in the form's first email field unless you name one, and keeps the field's own
+description or label as the wording unless you write the wording yourself.
+
+When a submission arrives with the box ticked:
+
+| Who | Grant | Withdraw |
+|---|---|---|
+| Signed in, and the form's address is their account's | Recorded at once, marked verified | Recorded at once |
+| Anybody else | **Waits for an emailed confirmation** | Recorded at once, marked `"verified": false` |
+
+A waiting grant is not consent yet, and it is not in the ledger. Lock stores it, emails the
+address a link, and records the grant only when that link's button is pressed — marked
+`"verified": true`, `"confirmedBy": "email"`, with the time, the wording, the page, the form and
+the submission ID. That is the "confirm by email" Article 7(1) needs for a box anybody could have
+ticked for anybody.
+
+The link works the way a request's verification link does:
+
+- **Opening it changes nothing.** It shows a page with a *Yes, I agree* button. Mail scanners open
+  every link in an email, and a link that confirmed on its own would be confirmed by a robot.
+- **It works once**, and stops working after `verificationTtl` hours (48). An unconfirmed
+  confirmation is deleted by garbage collection after that.
+- **The code is 256 random bits**, stored only as its hash and looked up by an exact match.
+- The page sends `no-store` and `no-referrer`. Override it with site templates at
+  `lock/confirm.twig` (which must post `code` and `action=lock/portal/confirm` with a CSRF token)
+  and `lock/confirmed.twig`.
+
+The email is sent even when *Email the subject* is off, because without it the consent can never
+be recorded. Sending it uses the intake form's rate limit: `intakeRateLimit` per address and per
+IP, `intakeGlobalLimit` across the site.
+
+Nothing Lock does changes what the form answers. The visitor sees Formie's or Freeform's own
+success message whether a confirmation went out, nothing needed changing, or the rate limit
+stopped it, so the form cannot be used to find out what an address has agreed to. A ticked
+purpose the address already allows sends no email. An **unticked** box is no decision at all:
+somebody sending a contact form without ticking the newsletter box has not withdrawn from
+anything. Submissions the form plugin marks as spam, unfinished multi-page submissions, and
+submissions made in the control panel or from the console are ignored.
+
+The integration is in Lite. It needs Formie or Freeform installed and enabled, and does nothing
+when neither is. A site with its own form handler can call the same entry point:
+
+```php
+use justinholtweb\lock\Plugin as Lock;
+
+Lock::getInstance()->formConsent->capture('my-form', 'newsletter', $email, [
+    ['purpose' => 'marketing', 'ticked' => true, 'text' => 'Email me the newsletter.'],
+]);
+```
+
+Waiting confirmations are counted on the Consent screen, appear in a subject's disclosure, and are
+deleted outright by an erasure: anonymising a request to email somebody would leave nothing worth
+keeping.
 
 ## The ledger
 

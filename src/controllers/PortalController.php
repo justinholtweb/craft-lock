@@ -6,6 +6,7 @@ use Craft;
 use craft\helpers\StringHelper;
 use craft\web\Controller;
 use craft\web\View;
+use justinholtweb\lock\helpers\RateLimit;
 use justinholtweb\lock\models\ConsentEntry;
 use justinholtweb\lock\models\Request as SubjectRequest;
 use justinholtweb\lock\models\Settings;
@@ -37,6 +38,7 @@ class PortalController extends Controller
         'verify' => self::ALLOW_ANONYMOUS_LIVE,
         'status' => self::ALLOW_ANONYMOUS_LIVE,
         'consent' => self::ALLOW_ANONYMOUS_LIVE,
+        'confirm' => self::ALLOW_ANONYMOUS_LIVE,
     ];
 
     /** Takes a request from a front-end form. */
@@ -123,107 +125,23 @@ class PortalController extends Controller
         return $this->redirectToPostedUrl();
     }
 
-    /**
-     * Counts one attempt against every key, and says whether all of them are still in bounds.
-     *
-     * Every key is counted, not just the first one over — otherwise the IP counter stops moving
-     * the moment the address counter trips, and a script learns which one it hit.
-     *
-     * The counter is an add-then-increment rather than a read-then-write: `add()` only succeeds
-     * for the first hit in a window, so two simultaneous first hits cannot both believe they were
-     * first. It is not a transaction — the cache API has no increment — but the window it leaves
-     * is a handful of requests wide, not unbounded.
-     *
-     * @param array<string, string> $keys
-     */
+    /** @param array<string, string> $keys */
     private function withinRateLimit(string $bucket, array $keys, int $perKey, int $global = 0): bool
     {
-        $within = true;
-
-        if ($perKey > 0) {
-            foreach ($keys as $name => $value) {
-                if ($value === '') {
-                    continue;
-                }
-
-                if (self::hit("lock.rate.$bucket.$name." . hash('sha256', $value)) > $perKey) {
-                    $within = false;
-                }
-            }
-        }
-
-        if ($global > 0 && self::hit("lock.rate.$bucket.global") > $global) {
-            $within = false;
-        }
-
-        return $within;
+        return RateLimit::within($bucket, $keys, $perKey, $global);
     }
 
-    /** One more attempt in a fixed one-hour window. Returns the count including this one. */
-    private static function hit(string $key, int $window = 3600): int
-    {
-        $cache = Craft::$app->getCache();
-        $now = time();
-
-        if ($cache->add($key, ['n' => 1, 'until' => $now + $window], $window)) {
-            return 1;
-        }
-
-        $current = $cache->get($key);
-        $until = is_array($current) ? (int)($current['until'] ?? 0) : 0;
-
-        if ($until <= $now) {
-            $cache->set($key, ['n' => 1, 'until' => $now + $window], $window);
-
-            return 1;
-        }
-
-        $count = (int)($current['n'] ?? 0) + 1;
-
-        // The window keeps its original end. Re-arming the TTL on every hit would turn a steady
-        // trickle into a limit that never resets — fatal for the site-wide counter.
-        $cache->set($key, ['n' => $count, 'until' => $until], max(1, $until - $now));
-
-        return $count;
-    }
-
-    /**
-     * The address as a rate-limit key, with the cheap variations folded together.
-     *
-     * `Ada+1@x`, `ada+2@x` and `ADA@x` are one mailbox, and a limit that counts them separately
-     * is a limit of five per spelling. Gmail ignores dots in the local part and answers to
-     * googlemail.com as well, so those are folded too. Only the key is normalised — the request
-     * keeps the address exactly as it was typed.
-     */
+    /** Kept for anything that called it here before the rate limit moved to {@see RateLimit}. */
     public static function rateKeyForEmail(string $email): string
     {
-        $email = mb_strtolower(trim($email));
-        $at = strrpos($email, '@');
-
-        if ($at === false) {
-            return $email;
-        }
-
-        $local = substr($email, 0, $at);
-        $domain = substr($email, $at + 1);
-
-        if (($plus = strpos($local, '+')) !== false) {
-            $local = substr($local, 0, $plus);
-        }
-
-        if ($domain === 'gmail.com' || $domain === 'googlemail.com') {
-            $local = str_replace('.', '', $local);
-            $domain = 'gmail.com';
-        }
-
-        return "$local@$domain";
+        return RateLimit::keyForEmail($email);
     }
 
     /**
      * Renders a portal page, letting the site override it.
      *
      * A site template at `lock/<page>.twig` — `lock/verify.twig`, `lock/verified.twig`,
-     * `lock/status.twig` — wins over the plugin's own. The built-in pages are deliberately plain
+     * `lock/status.twig`, `lock/confirm.twig`, `lock/confirmed.twig` — wins over the plugin's own. The built-in pages are deliberately plain
      * and unbranded — they work on a fresh install, which matters because the link in a
      * verification email must never 404 — but the page a data subject lands on is a page on
      * somebody's website, and they should be able to make it look like one.
@@ -433,5 +351,61 @@ class PortalController extends Controller
         Craft::$app->getSession()->setNotice(Craft::t('lock', 'Your preferences have been saved.'));
 
         return $this->redirectToPostedUrl();
+    }
+
+    /**
+     * Confirms consent ticked on a Formie or Freeform form, from the emailed link — in two steps,
+     * like {@see actionVerify()}: a GET only shows a button, because mail scanners open every link.
+     *
+     * Rate limited by IP. The code is 256 bits, so this is not about guessing it; it stops the
+     * endpoint being a cheap way to make the database hash things. A limited caller is told the
+     * link has expired, the same as a wrong one.
+     */
+    public function actionConfirm(?string $code = null): Response
+    {
+        /** @var Settings $settings */
+        $settings = Plugin::getInstance()->getSettings();
+        $service = Plugin::getInstance()->formConsent;
+
+        $code = (string)($this->request->getBodyParam('code') ?? $code ?? $this->request->getQueryParam('code', ''));
+        $limit = $settings->intakeRateLimit > 0 ? $settings->intakeRateLimit * 4 : 0;
+        $within = $this->withinRateLimit('confirm', ['ip' => (string)$this->request->getUserIP()], $limit);
+        $pending = $within ? $service->getPendingByCode($code) : null;
+
+        // Nothing about the page is worth caching or passing on: the URL carries the code.
+        $this->response->getHeaders()
+            ->set('Cache-Control', 'no-store, private')
+            ->set('Referrer-Policy', 'no-referrer')
+            ->set('X-Robots-Tag', 'noindex, nofollow');
+
+        if ($pending === null) {
+            return $this->renderPortal('confirmed', [
+                'ok' => false,
+                'message' => Craft::t('lock', 'That link has expired or has already been used. Fill in the form again and we will email a fresh one.'),
+            ]);
+        }
+
+        if (!$this->request->getIsPost()) {
+            return $this->renderPortal('confirm', [
+                'code' => $code,
+                'purposes' => $service->purposeLabels($pending),
+            ]);
+        }
+
+        $recorded = $service->confirm($pending);
+
+        if ($recorded === null) {
+            // Spent by a second tab or a double click between the lookup and the button.
+            return $this->renderPortal('confirmed', [
+                'ok' => false,
+                'message' => Craft::t('lock', 'That link has expired or has already been used. Fill in the form again and we will email a fresh one.'),
+            ]);
+        }
+
+        return $this->renderPortal('confirmed', [
+            'ok' => true,
+            'purposes' => $service->purposeLabels($pending),
+            'message' => Craft::t('lock', 'Thank you — that is confirmed. You can change your mind at any time.'),
+        ]);
     }
 }

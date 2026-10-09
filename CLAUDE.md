@@ -13,7 +13,7 @@ write the policy; this is the plugin that makes it true.
 ## Tech Stack
 
 - **PHP 8.2+**, **Craft CMS 5.3+**, Yii2, Twig
-- No build step and no runtime dependencies. Eight tables. Optional integrations with Commerce,
+- No build step and no runtime dependencies. Nine tables. Optional integrations with Commerce,
   Formie, Freeform, Verbb Comments and Toss, all guarded by `isAvailable()`.
 
 ## Architecture
@@ -85,6 +85,16 @@ attached, and the remedy is a retention rule on whole files. Consent records are
   Signed out, it can withdraw (marked unverified) and answers identically whatever happened.
 - **`lock_activity` has no FK to the request**, so the line saying a request was deleted outlives
   the row it is about.
+- **Form consent waits in `lock_pendingconsents`, outside the ledger.** `services/FormConsent`
+  listens to Formie (`Submissions` `afterSubmission`) and Freeform (`Form` `after-submit`) by
+  *string* class name — `Event::on()` never autoloads — and checks `isPluginEnabled()` before
+  touching either. Site requests only. Signed in for your own address: granted at once. Otherwise
+  a grant is a pending row (address in the clear, because it has to be emailed; token hashed) and
+  a `lock/confirm/<code>` link; `confirm()` deletes the row with a conditional DELETE first and
+  only the call that affected one row records. Withdrawals apply at once. Pending rows are
+  disclosed and *erased* by `ConsentCollector` (`consent:pending:<id>`), and GC deletes expired
+  ones. `Consent::record()` is public API — craft-leads writes confirmed sign-ups through it — so
+  its signature stays.
 
 ## Traps found while building this
 
@@ -126,6 +136,13 @@ attached, and the remedy is a retention rule on whole files. Consent records are
 - **`LIKE '%addr%'` is a pre-filter, never the decision.** It finds `alex@corp.com` for
   `lex@corp.co`. `helpers/Address` decides matches and does the rewriting, with one bounded pattern
   for both stored forms.
+- **Formie's Agree field needs `checkedValue`/`uncheckedValue`.** Built in PHP without them, every
+  front-end submission 500s in Formie's spam check (`defineValueAsString()` returns null). The
+  form builder sets them; a test fixture has to.
+- **Freeform hands back the same `Form` object on every load in a request**, spam marks and field
+  values included. Clear what a check set.
+- **Something below Craft can add a second `Referrer-Policy`** (the harness sends
+  `no-referrer-when-downgrade`), and browsers take the last. The portal shell carries the meta tag.
 - Adding `P60D` to a timezone-aware `DateTime` across a DST boundary moves the timestamp by 60
   days ± an hour. Compare deadlines in **days**, never in seconds.
 
@@ -140,6 +157,7 @@ No local PHP on this Mac. Everything runs in the plugin-testing container.
 ```sh
 cd ~/Sites/plugin-testing
 docker exec -w /var/www/html ddev-plugin-testing-web php /var/www/craft-lock/tests/integration/checks.php   # 150 checks
+docker exec -w /var/www/html ddev-plugin-testing-web php /var/www/craft-lock/tests/integration/form-consent.php  # 37: Formie over HTTP + Mailpit, Freeform, capture rules
 docker exec ddev-plugin-testing-web bash /var/www/craft-lock/tests/integration/cp-smoke.sh                  # 16 screens
 docker exec -w /var/www/craft-lock ddev-plugin-testing-web php vendor/bin/phpunit                           # 39 tests
 docker exec -w /var/www/craft-lock ddev-plugin-testing-web php vendor/bin/ecs check

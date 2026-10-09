@@ -202,6 +202,11 @@ The front-end preferences form records a grant only for somebody who is signed i
 against their own account's address. A signed-out visitor can withdraw but never grant, because
 a grant anyone can type in for anyone else is not evidence of anything.
 
+**Formie and Freeform forms feed the ledger too.** Map a checkbox or agree field to a purpose and
+a ticked box becomes a decision. A grant from somebody signed out waits while Lock emails the
+address a confirmation link, and reaches the ledger only when the person at that address presses
+its button. Withdrawals apply at once. See [Consent](docs/consent.md#formie-and-freeform).
+
 Withdrawal is a new row, never an update. Overwriting would leave a ledger that cannot answer
 "were you allowed to email them in March", which is exactly the question that gets asked.
 
@@ -272,6 +277,7 @@ Lite is free and it is not a trial. Pro is $149 with a $119/year renewal.
 | The dossier, across all fourteen sources | ✓ | ✓ |
 | Export, anonymise, erase | ✓ | ✓ |
 | The consent ledger | ✓ | ✓ |
+| Consent from Formie and Freeform, confirmed by email | ✓ | ✓ |
 | The activity ledger | ✓ | ✓ |
 | Legal holds and the suppression list | ✓ | ✓ |
 | Retention rules and their scheduling | — | ✓ |

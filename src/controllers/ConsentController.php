@@ -42,6 +42,7 @@ class ConsentController extends Controller
             'entries' => Plugin::getInstance()->consent->find($criteria, 200),
             'tally' => Plugin::getInstance()->consent->tally(),
             'stale' => Plugin::getInstance()->consent->stale(200),
+            'pending' => Plugin::getInstance()->formConsent->countPending(),
             'purposes' => $settings->purposeOptions(),
             'criteria' => $criteria,
         ]);

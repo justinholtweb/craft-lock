@@ -199,6 +199,16 @@ class Settings extends Model
     /** @var int Months after which a consent record is treated as stale and needs re-asking. 0 never expires. */
     public int $consentExpiryMonths = 24;
 
+    /**
+     * @var array<int, array<string, string>> Formie and Freeform fields that capture consent. Each
+     *              row: `plugin` (`formie` or `freeform`), `form` and `field` handles, an optional
+     *              `emailField` handle (the form's first email field when blank), the `purpose`
+     *              key, `action` (`grant` or `withdraw`) and optional `wording` kept as evidence.
+     *              A ticked grant from a signed-out visitor waits for an emailed confirmation
+     *              before it reaches the ledger. See {@see \justinholtweb\lock\services\FormConsent}.
+     */
+    public array $formConsents = [];
+
     // ---------------------------------------------------------------------
     // Retention (Pro)
     // ---------------------------------------------------------------------
@@ -274,7 +284,7 @@ class Settings extends Model
             }
         }
 
-        foreach (['customTables', 'consentPurposes', 'retentionRules'] as $key) {
+        foreach (['customTables', 'consentPurposes', 'retentionRules', 'formConsents'] as $key) {
             if (isset($values[$key]) && is_array($values[$key])) {
                 $values[$key] = $this->stripBlankRows($values[$key]);
             }
@@ -331,6 +341,7 @@ class Settings extends Model
             [['staffRecipients'], 'validateRecipients', 'skipOnEmpty' => false],
             [['customTables'], 'validateCustomTables', 'skipOnEmpty' => false],
             [['consentPurposes'], 'validatePurposes', 'skipOnEmpty' => false],
+            [['formConsents'], 'validateFormConsents', 'skipOnEmpty' => false],
         ];
     }
 
@@ -399,6 +410,76 @@ class Settings extends Model
 
             $seen[$key] = true;
         }
+    }
+
+    public function validateFormConsents(string $attribute): void
+    {
+        $purposes = $this->purposeOptions();
+
+        foreach ($this->formConsents as $i => $row) {
+            $n = $i + 1;
+            $plugin = trim((string)($row['plugin'] ?? ''));
+
+            if (!in_array($plugin, ['formie', 'freeform'], true)) {
+                $this->addError($attribute, Craft::t('lock', 'Form row {n}: choose Formie or Freeform.', ['n' => $n]));
+            }
+
+            foreach (['form' => true, 'field' => true, 'emailField' => false] as $key => $needed) {
+                $value = trim((string)($row[$key] ?? ''));
+
+                if ($value === '' && $needed) {
+                    $this->addError($attribute, Craft::t('lock', 'Form row {n}: a form handle and a field handle are both needed.', ['n' => $n]));
+                    break;
+                }
+
+                if ($value !== '' && !preg_match('/^[A-Za-z_][A-Za-z0-9_-]*$/', $value)) {
+                    $this->addError($attribute, Craft::t('lock', 'Form row {n}: “{value}” is not a handle.', ['n' => $n, 'value' => $value]));
+                }
+            }
+
+            $purpose = trim((string)($row['purpose'] ?? ''));
+
+            if (!isset($purposes[$purpose])) {
+                $this->addError($attribute, Craft::t('lock', 'Form row {n}: “{purpose}” is not one of the purposes above.', ['n' => $n, 'purpose' => $purpose]));
+            }
+
+            if (!in_array((string)($row['action'] ?? 'grant'), ['grant', 'withdraw', ''], true)) {
+                $this->addError($attribute, Craft::t('lock', 'Form row {n}: a ticked box either grants or withdraws.', ['n' => $n]));
+            }
+        }
+    }
+
+    /**
+     * The consent mappings for one form, cleaned.
+     *
+     * @return array<int, array{field: string, emailField: string, purpose: string, action: string, wording: string}>
+     */
+    public function formConsentsFor(string $plugin, string $form): array
+    {
+        $rows = [];
+
+        foreach ($this->formConsents as $row) {
+            if (trim((string)($row['plugin'] ?? '')) !== $plugin || trim((string)($row['form'] ?? '')) !== $form) {
+                continue;
+            }
+
+            $field = trim((string)($row['field'] ?? ''));
+            $purpose = trim((string)($row['purpose'] ?? ''));
+
+            if ($field === '' || $purpose === '') {
+                continue;
+            }
+
+            $rows[] = [
+                'field' => $field,
+                'emailField' => trim((string)($row['emailField'] ?? '')),
+                'purpose' => $purpose,
+                'action' => (string)($row['action'] ?? '') === 'withdraw' ? 'withdraw' : 'grant',
+                'wording' => trim((string)($row['wording'] ?? '')),
+            ];
+        }
+
+        return $rows;
     }
 
     /** Where subject correspondence comes from and goes back to. */

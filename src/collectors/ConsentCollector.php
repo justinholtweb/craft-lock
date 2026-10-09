@@ -13,6 +13,7 @@ use justinholtweb\lock\models\ErasureTarget;
 use justinholtweb\lock\models\RetentionScope;
 use justinholtweb\lock\models\Subject;
 use justinholtweb\lock\records\ConsentRecord;
+use justinholtweb\lock\records\PendingConsentRecord;
 
 /**
  * Lock's own consent ledger.
@@ -40,7 +41,7 @@ class ConsentCollector extends BaseCollector
 
     public function description(): string
     {
-        return Craft::t('lock', 'Consent given, refused and withdrawn, with the evidence of each decision.');
+        return Craft::t('lock', 'Consent given, refused and withdrawn, with the evidence of each decision, and consent from forms still waiting for its emailed confirmation.');
     }
 
     protected function find(Subject $subject, Bundle $bundle): array
@@ -79,11 +80,67 @@ class ConsentCollector extends BaseCollector
             $records[] = $record;
         }
 
+        return array_merge($records, $this->findPending($subject));
+    }
+
+    /**
+     * Consent ticked on a form and not yet confirmed. Not consent yet, so nothing Article 7(1)
+     * needs kept: it is disclosed like anything else held about the address, and an erasure
+     * deletes it outright — anonymising a request to email somebody would leave nothing worth
+     * having.
+     *
+     * @return DataRecord[]
+     */
+    private function findPending(Subject $subject): array
+    {
+        $rows = (new Query())
+            ->from([PendingConsentRecord::tableName()])
+            ->where(['or', ['emailHash' => $subject->emailHash()], ['email' => $subject->normalisedEmail()]])
+            ->orderBy(['dateCreated' => SORT_DESC])
+            ->limit(100)
+            ->all();
+
+        $records = [];
+
+        foreach ($rows as $row) {
+            $grants = is_string($row['grants'] ?? null) ? json_decode($row['grants'], true) : ($row['grants'] ?? []);
+            $evidence = is_string($row['evidence'] ?? null) ? json_decode($row['evidence'], true) : ($row['evidence'] ?? []);
+
+            $record = $this->record("consent:pending:{$row['id']}", Craft::t('lock', 'Unconfirmed consent from a form on {date}', [
+                'date' => substr((string)$row['dateCreated'], 0, 10),
+            ]), [
+                'Email' => $row['email'],
+                'Purposes' => implode(', ', array_column(is_array($grants) ? $grants : [], 'purpose')),
+                'Form' => $row['form'],
+                'Waiting since' => $row['dateCreated'],
+                'Link expires' => $row['expiresAt'],
+                'Page' => is_array($evidence) ? ($evidence['url'] ?? null) : null,
+                'IP address' => is_array($evidence) ? ($evidence['ip'] ?? null) : null,
+            ]);
+            $record->categories = [DataRecord::CATEGORY_CONTACT, DataRecord::CATEGORY_TECHNICAL];
+            $record->erasable = true;
+            $record->anonymisable = false;
+            $record->basis = Craft::t('lock', 'Held only to send the confirmation email, until it is confirmed or expires.');
+            $record->retention = Craft::t('lock', 'Deleted on confirmation, or when the link expires.');
+            $record->dateCreated = ($row['dateCreated'] ?? null) !== null ? new DateTime((string)$row['dateCreated']) : null;
+            $records[] = $record;
+        }
+
         return $records;
     }
 
     public function apply(ErasureTarget $target, Subject $subject): void
     {
+        if (str_starts_with($this->keyBody($target->key), 'pending:')) {
+            if ($target->action === ErasureTarget::ACTION_ERASE) {
+                Craft::$app->getDb()->createCommand()->delete(PendingConsentRecord::tableName(), [
+                    'id' => (int)substr($this->keyBody($target->key), strlen('pending:')),
+                ])->execute();
+            }
+
+            return;
+        }
+
         if ($target->action !== ErasureTarget::ACTION_ANONYMISE) {
             return;
         }
