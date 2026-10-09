@@ -1,7 +1,6 @@
 # Release Notes for Lock
 
-## Unreleased
-
+## 5.1.0 - 2026-10-09
 ### Added
 
 - **Consent from Formie and Freeform forms, confirmed by email.** Map a form's checkbox or agree
